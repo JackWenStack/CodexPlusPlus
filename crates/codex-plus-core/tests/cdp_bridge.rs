@@ -2934,8 +2934,8 @@ fn injection_script_activates_session_delete_once_per_click() {
 fn injection_script_refreshes_sidebar_after_session_undo() {
     let script = assets::injection_script(57321);
     let refresh = script
-        .split_once("async function refreshRecentConversationsForHost()")
-        .expect("recent conversation refresh helper should exist")
+        .split_once("async function sendNativeSessionRequest(method, params)")
+        .expect("native session request helper should exist")
         .1
         .split_once("function showToast")
         .expect("refresh helper should end before toast helper")
@@ -2950,10 +2950,13 @@ fn injection_script_refreshes_sidebar_after_session_undo() {
         .expect("undo toast should end before sharing helpers")
         .0;
 
-    assert!(refresh.contains("loadOptionalCodexAppModule(\"app-server-manager-signals-\")"));
+    assert!(refresh.contains("loadOptionalCodexAppModule(name)"));
+    assert!(refresh.contains("\"app-server-manager-signals-\""));
+    assert!(refresh.contains("\"app-initial-\""));
     assert!(!refresh.contains("app-server-manager-signals-C1h8B-R-.js"));
-    assert!(toast.contains("const refreshed = await refreshRecentConversationsForHost();"));
-    assert!(toast.contains("if (!refreshed) window.location.reload();"));
+    assert!(toast.contains("syncLocalSessionMutation(\"thread/unarchived\", result.session_id)"));
+    assert!(toast.contains("settings.onUndone?.()"));
+    assert!(!toast.contains("window.location.reload()"));
 }
 
 #[test]
@@ -3477,11 +3480,14 @@ fn injection_script_discovers_app_server_request_clients_without_hardcoded_hash(
 fn injection_script_refreshes_sidebar_after_undo_without_stale_asset_exports() {
     let script = assets::injection_script(57321);
 
-    assert!(script.contains("loadOptionalCodexAppModule(\"app-server-manager-signals-\")"));
-    assert!(script.contains("Object.values(signals || {}).find"));
+    assert!(script.contains("loadOptionalCodexAppModule(name)"));
+    assert!(script.contains("Object.values(module || {}).find"));
+    assert!(script.contains("\"app-initial-\", \"app-server-manager-signals-\""));
     assert!(script.contains("refresh-recent-conversations-for-host"));
-    assert!(script.contains("const refreshed = await refreshRecentConversationsForHost()"));
-    assert!(script.contains("if (!refreshed) window.location.reload()"));
+    assert!(script.contains("handle-app-server-notification-for-host"));
+    assert!(script.contains("syncLocalSessionMutation(\"thread/unarchived\", result.session_id)"));
+    assert!(script.contains("if (expired) return false;"));
+    assert!(script.contains("clearTimeout(timer);"));
     assert!(!script.contains("app-server-manager-signals-C1h8B-R-.js"));
     assert!(!script.contains("typeof signals.rn"));
 }
