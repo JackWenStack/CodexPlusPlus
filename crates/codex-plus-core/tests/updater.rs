@@ -1,5 +1,5 @@
 use codex_plus_core::update::{
-    Release, download_asset_to, is_newer_version, parse_version_tag, release_from_github_payload,
+    DEFAULT_LATEST_JSON_URL, DEFAULT_REPOSITORY, Release, download_asset_to, is_newer_version, parse_version_tag, release_from_github_payload,
     release_from_latest_json_payload, safe_asset_name, select_update_asset,
 };
 use serde_json::json;
@@ -16,6 +16,24 @@ fn version_comparison_uses_numeric_segments() {
     assert!(is_newer_version("v1.0.10", "1.0.4").unwrap());
     assert!(!is_newer_version("v1.0.4", "1.0.4").unwrap());
     assert!(!is_newer_version("v1.0.3", "1.0.4").unwrap());
+}
+
+#[test]
+fn custom_releases_use_the_fork_channel_and_compare_revision_numbers() {
+    assert_eq!(DEFAULT_REPOSITORY, "JackWenStack/CodexPlusPlus");
+    assert_eq!(
+        DEFAULT_LATEST_JSON_URL,
+        format!("https://github.com/{DEFAULT_REPOSITORY}/releases/latest/download/latest.json")
+    );
+    assert_eq!(parse_version_tag("v1.10.0-jack.1").unwrap(), vec![1, 10, 0, 1]);
+    assert!(is_newer_version("v1.10.0-jack.1", "1.10.0").unwrap());
+    assert!(is_newer_version("v1.10.0-jack.10", "1.10.0-jack.2").unwrap());
+    assert!(is_newer_version("v1.11.0-jack.1", "1.10.0-jack.99").unwrap());
+    assert!(!is_newer_version("v1.10.0-jack.1", "1.10.0-jack.1").unwrap());
+    assert!(!is_newer_version("v1.10.0", "1.10.0-jack.1").unwrap());
+    assert_eq!(parse_version_tag("1.10.0-jack.1+local").unwrap(), vec![1, 10, 0, 1]);
+    assert!(parse_version_tag("1.10.0-jack.invalid").is_err());
+    assert!(parse_version_tag("1.10-jack.1").is_err());
 }
 
 #[test]

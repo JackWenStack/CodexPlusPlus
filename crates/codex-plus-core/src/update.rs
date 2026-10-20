@@ -8,9 +8,9 @@ use serde_json::{Value, json};
 #[cfg(any(target_os = "macos", test))]
 pub mod macos;
 
-pub const DEFAULT_REPOSITORY: &str = "BigPizzaV3/CodexPlusPlus";
+pub const DEFAULT_REPOSITORY: &str = "JackWenStack/CodexPlusPlus";
 pub const DEFAULT_LATEST_JSON_URL: &str =
-    "https://github.com/BigPizzaV3/CodexPlusPlus/releases/latest/download/latest.json";
+    "https://github.com/JackWenStack/CodexPlusPlus/releases/latest/download/latest.json";
 const UPDATE_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const UPDATE_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(600);
 
@@ -79,10 +79,22 @@ pub fn parse_version_tag(value: &str) -> anyhow::Result<Vec<u64>> {
     if digits.is_empty() {
         anyhow::bail!("Invalid version tag: {value}");
     }
-    digits
+    let mut version = digits
         .split('.')
         .map(|part| part.parse::<u64>().map_err(Into::into))
-        .collect()
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    // 定制通道的 jack.N 是同一上游基线上的发布修订号；其他旧版后缀保留原有比较语义。
+    if let Some(revision) = normalized
+        .strip_prefix(&digits)
+        .and_then(|suffix| suffix.strip_prefix("-jack."))
+    {
+        if version.len() != 3 {
+            anyhow::bail!("Custom release requires a three-part base version: {value}");
+        }
+        let revision = revision.split('+').next().unwrap_or_default();
+        version.push(revision.parse::<u64>()?);
+    }
+    Ok(version)
 }
 
 pub fn is_newer_version(candidate: &str, current: &str) -> anyhow::Result<bool> {

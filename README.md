@@ -1,3 +1,11 @@
+## JackWen Windows 定制版
+
+本仓库基于 [BigPizzaV3/CodexPlusPlus](https://github.com/BigPizzaV3/CodexPlusPlus)，维护 Windows 会话删除兼容、原生列表同步与透明删除确认框。定制版本使用 `-jack.N` 后缀，更新源指向本 Fork。
+
+[下载定制版](https://github.com/JackWenStack/CodexPlusPlus/releases) · [构建状态](https://github.com/JackWenStack/CodexPlusPlus/actions/workflows/custom-windows.yml) · [同步、发布与回滚](docs/custom-maintenance.md)
+
+下方保留上游说明；本定制版的安装包以上方下载入口为准。
+
 <p align="center">
   <img src="docs/images/readme-preview/hero.svg" alt="Codex++ — 让 Codex 更顺手。供应商与模型、工作流增强、拓展与个性化。" width="100%">
 </p>

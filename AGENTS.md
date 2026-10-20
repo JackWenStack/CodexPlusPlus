@@ -4,7 +4,9 @@
 
 ## 项目概述
 
-本仓库是用户自己的 [CodexPlusPlus](https://github.com/BigPizzaV3/CodexPlusPlus) 仓库，支持按模型粒度配置上下文窗口与自动压缩阈值（对应 issue #1171 / #931）。
+本仓库是 [JackWenStack/CodexPlusPlus](https://github.com/JackWenStack/CodexPlusPlus) Windows 定制版，`origin` 指向本 Fork，`upstream` 指向 BigPizzaV3/CodexPlusPlus。
+
+涉及上游同步、版本升级、构建发布或回滚时，先读 [定制版维护说明](docs/custom-maintenance.md)。保留独立的定制补丁提交；不通过覆盖源码目录的方式同步上游。定制版更新源必须留在本 Fork。
 
 采用 codex 原生 `model_catalog_json` 机制：通过 `model_list` 后缀语法（如 `deepseek-v4-pro[1M]`）声明每模型窗口，由 CodexPlusPlus 生成 catalog 文件并注入 config.toml 指针，codex 客户端运行时按模型识别各自窗口。
 
@@ -71,6 +73,8 @@
 推荐一条命令：`node scripts/relaunch-local.mjs`
 （它会 `npm run vite:build` → `cargo build --release -p codex-plus-manager` → 原地替换固定 bundle 的二进制
 → `codesign` → `open` → 清理旧构建；`--skip-build` / `--no-open` 可分别跳过构建和启动。）
+
+以上 relaunch/bundle 步骤用于 macOS。Windows 使用 `pwsh -File scripts/build-custom-windows.ps1`；需要 NSIS 安装包时加 `-Package`。构建后先用隔离的数据目录验收，替换已有安装前保留可回滚的程序副本。应用的用户配置、凭据、会话数据库和个人皮肤不进入 Git 或发布附件。
 
 固定 bundle 的规则：
 
