@@ -29,12 +29,13 @@ try {
     Run-Checked 'npm.cmd' @('ci', '--prefix', 'apps/codex-plus-manager', '--no-audit', '--no-fund')
     Run-Checked 'node' @('scripts/assemble-renderer-inject.mjs', '--check')
     Run-Checked 'npm.cmd' @('--prefix', 'apps/codex-plus-manager', 'run', 'check')
+    # Tauri 的 generate_context! 在 cargo test 编译阶段也需要 frontendDist。
+    Run-Checked 'npm.cmd' @('--prefix', 'apps/codex-plus-manager', 'run', 'vite:build')
     if (-not $SkipTests) {
         Run-Checked 'node' @('--test', 'scripts/custom-release.test.mjs')
         Run-Checked 'npm.cmd' @('--prefix', 'apps/codex-plus-manager', 'test')
         Run-Checked 'cargo' @('test', '--locked', '--workspace')
     }
-    Run-Checked 'npm.cmd' @('--prefix', 'apps/codex-plus-manager', 'run', 'vite:build')
     Run-Checked 'cargo' @('build', '--locked', '--release', '-p', 'codex-plus-manager', '--bin', 'codex-plus-plus')
     $targetRoot = if ($env:CARGO_TARGET_DIR) { [IO.Path]::GetFullPath($env:CARGO_TARGET_DIR) } else { Join-Path $repoRoot 'target' }
     $output = Join-Path $repoRoot 'dist\windows'
