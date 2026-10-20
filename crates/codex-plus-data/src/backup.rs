@@ -154,7 +154,12 @@ impl BackupStore {
             &serde_json::to_vec_pretty(&payload)?,
         )?;
         pending.committed = true;
-        File::open(self.path_for(&token))?.sync_all()?;
+        // Windows 的 FlushFileBuffers 要求可写句柄；只读打开会在删除前报 os error 5。
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(self.path_for(&token))?
+            .sync_all()?;
         Ok((token, entries))
     }
 
@@ -389,6 +394,20 @@ fn hash_file(path: &Path) -> anyhow::Result<(u64, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn backup_manifest_is_persisted_and_readable_before_delete() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = BackupStore::new(temp.path().join("backups"));
+        let tables = json!({"threads": [{"id": "fixture", "title": "keep until backed up"}]});
+        let token = store
+            .write_backup("fixture", Path::new("fixture.db"), tables.clone())
+            .unwrap();
+        let backup = store.read_backup(&token).unwrap();
+        assert_eq!(backup["session_id"], "fixture");
+        assert_eq!(backup["tables"], tables);
+        assert_eq!(backup["version"], 2);
+    }
+
     #[test]
     fn copy_is_bounded_and_writer_failure_is_propagated() {
         struct Large {
