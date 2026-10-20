@@ -125,10 +125,12 @@ function deleteFixture() {
     postJson: (_path: string, ref: any) => { requests.push(ref); return request.promise; },
     showToast: (text: string) => { toasts.push(text); },
     sendCodexPlusDiagnostic: (event: string, details: any) => { diagnostics.push({ event, details }); },
-    setTimeout: (_fn: Function, delay: number) => { timers.push(delay); return 1; },
+    setTimeout: (_fn: Function, delay: number) => { timers.push(delay); return delay; },
+    clearTimeout: (delay: number) => { const index = timers.indexOf(delay); if (index >= 0) timers.splice(index, 1); },
+    codexAppAssetUrl: () => "",
     rpc: { sendRequest: (method: string, params: any) => { refreshes.push({ method, params }); return Promise.resolve({}); } },
   });
-  vm.runInContext(`${refHelpers}\n${singleFunction(refs, "locationThreadId")}\n${singleFunction(refs, "currentSessionRef")}\n${deletion.slice(deletion.indexOf("  function rowHref(row)"), deletion.indexOf("  async function exportMarkdown(ref)"))}\n${singleFunction(deletion, "refreshRecentConversationsForHost")}\nfunction signal(e,t){return rpc.sendRequest(e,t)}; loadOptionalCodexAppModule=async()=>({signal});`, context);
+  vm.runInContext(`${refHelpers}\n${singleFunction(refs, "locationThreadId")}\n${singleFunction(refs, "currentSessionRef")}\n${deletion.slice(deletion.indexOf("  function rowHref(row)"), deletion.indexOf("  async function exportMarkdown(ref)"))}\n${singleFunction(deletion, "sendNativeSessionRequest")}\n${singleFunction(deletion, "syncLocalSessionMutation")}\n${singleFunction(deletion, "refreshRecentConversationsForHost")}\nfunction signal(e,t){return rpc.sendRequest(e,t)}; loadOptionalCodexAppModule=async()=>({signal});`, context);
   const begin = async (element = rows[0]) => { context.openDeleteConfirmForRow(element, button, context.sessionRefFromRow(element), { preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {} }); await flush(); };
   const finish = async (result = { status: "local_deleted", session_id: requests[0]?.session_id, message: "deleted" }) => { request.resolve(result); await flush(); };
   return { context, rows, native, buttons, requests, confirmations, diagnostics, timers, toasts, refreshes, styles, begin, finish, activate, setLocation, reloads: () => reloads };
@@ -246,4 +248,101 @@ test("missing or ambiguous native new-chat affordances never trigger a reload", 
     await f.begin(); await f.finish();
     assert.equal(f.native.clicks, 0); assert.equal(f.timers.length, 0); assert.equal(f.reloads(), 0);
   }
+});
+
+test("26.730 uses its loaded app-initial three-argument dispatcher without scanning a missing module", async () => {
+  const f = deleteFixture(), loaded: string[] = [];
+  f.context.codexAppAssetUrl = (name: string) => name === "app-initial-" ? "app://-/assets/app-initial-fixture.js" : "";
+  vm.runInContext("function legacy(e,t,n){return n==null?rpc.sendRequest(e,t):rpc.sendRequest(e,t,n)}", f.context);
+  f.context.loadOptionalCodexAppModule = async (name: string) => { loaded.push(name); return { dispatcher: f.context.legacy }; };
+  await f.begin(); await f.finish();
+  assert.deepEqual(loaded, ["app-initial-"]);
+  assert.equal(f.refreshes.length, 1);
+  assert.equal(f.refreshes[0].params.notification.method, "thread/deleted");
+});
+
+test("failed deletion never emits a native deletion notification or changes the list", async () => {
+  const f = deleteFixture(); await f.begin();
+  await f.finish({ status: "failed", session_id: uuid, message: "Thread not found in local storage" });
+  assert.equal(f.refreshes.length, 0);
+  assert.equal(f.rows[0].removed, false);
+  assert.equal(f.native.clicks, 0);
+});
+
+test("undo notification restores the same local identity without calling server deletion", async () => {
+  const f = deleteFixture();
+  assert.equal(await f.context.syncLocalSessionMutation("thread/unarchived", `local:${uuid}`), true);
+  assert.equal(f.refreshes[0].params.notification.method, "thread/unarchived");
+  assert.equal(f.refreshes[0].params.notification.params.threadId, uuid);
+  assert.equal(await f.context.syncLocalSessionMutation("thread/unarchived", "client-new-thread:fixture"), false);
+  assert.equal(await f.context.syncLocalSessionMutation("thread/delete", uuid), false);
+  assert.equal(f.refreshes.length, 1);
+  assert.equal(f.reloads(), 0);
+});
+
+test("the undo button notifies native state only after a successful restore, without reloading drafts", async () => {
+  for (const status of ["undone", "failed"]) {
+    const f = deleteFixture(), elements: any[] = [];
+    Object.assign(f.context, {
+      codexPlusToastLimit: 3, codexPlusToastLifetimeMs: 10000,
+      layoutCodexPlusToasts: () => {}, dismissCodexPlusToast: () => {},
+      postJson: async () => ({ status, session_id: uuid, message: status }),
+    });
+    f.context.document.querySelectorAll = () => [];
+    f.context.document.body = { appendChild() {} };
+    f.context.document.createElement = () => {
+      const element: any = {
+        dataset: {}, listeners: {},
+        appendChild() {},
+        addEventListener(name: string, listener: Function) { this.listeners[name] = listener; },
+      };
+      elements.push(element);
+      return element;
+    };
+    vm.runInContext(singleFunction(deletion, "showToast"), f.context);
+    f.context.showToast("deleted", "test-backup-token");
+    await elements[1].listeners.click();
+    assert.equal(f.refreshes.length, status === "undone" ? 1 : 0);
+    if (status === "undone") assert.equal(f.refreshes[0].params.notification.method, "thread/unarchived");
+    assert.equal(f.reloads(), 0);
+  }
+});
+
+test("notification incompatibility falls back to bounded native list refresh", async () => {
+  const f = deleteFixture();
+  f.context.rpc.sendRequest = async (method: string, params: any) => {
+    f.refreshes.push({ method, params });
+    if (method === "handle-app-server-notification-for-host") throw new Error("unsupported");
+    return {};
+  };
+  await f.begin(); await f.finish();
+  assert.deepEqual(f.refreshes.map((entry) => entry.method), [
+    "handle-app-server-notification-for-host", "refresh-recent-conversations-for-host",
+  ]);
+  assert.equal(f.reloads(), 0);
+});
+
+test("module timeout cannot send a late deletion notification after undo", async () => {
+  const f = deleteFixture(), module = deferred<any>(), callbacks: Function[] = [];
+  f.context.loadOptionalCodexAppModule = () => module.promise;
+  f.context.setTimeout = (fn: Function) => { callbacks.push(fn); return callbacks.length; };
+  const request = f.context.sendNativeSessionRequest("handle-app-server-notification-for-host", {});
+  callbacks[0]();
+  assert.equal(await request, false);
+  module.resolve({ signal: f.context.signal });
+  await flush();
+  assert.equal(f.refreshes.length, 0);
+});
+
+test("a hanging refresh is bounded and a wrong dispatcher signature is not invoked", async () => {
+  const f = deleteFixture(), callbacks: Function[] = [];
+  f.context.setTimeout = (fn: Function) => { callbacks.push(fn); return callbacks.length; };
+  f.context.rpc.sendRequest = () => new Promise(() => {});
+  const request = f.context.refreshRecentConversationsForHost();
+  await flush(); callbacks[0]();
+  assert.equal(await request, false);
+  let called = false;
+  f.context.loadOptionalCodexAppModule = async () => ({ unrelated: (_a: unknown, _b: unknown) => { called = true; } });
+  assert.equal(await f.context.refreshRecentConversationsForHost(), false);
+  assert.equal(called, false);
 });

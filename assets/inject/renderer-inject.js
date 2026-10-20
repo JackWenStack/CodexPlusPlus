@@ -422,7 +422,7 @@
   // Codex 的界面缩放是给内层布局节点设 CSS zoom，不是改 documentElement。
   // 我们的 overlay 挂在 body 下、落在那棵缩放子树之外，只能自己读这个变量跟随。
   const codexPlusWindowZoomVar = "--codex-window-zoom";
-  const codexDeleteVersion = "7";
+  const codexDeleteVersion = "8";
   const codexExportVersion = "1";
   const codexActionGroupVersion = "6";
   const codexArchiveRowActionsVersion = "1";
@@ -1965,7 +1965,7 @@
     window.__codexPlusExtensionFailures.push({ script_key: scriptKey, message, at: Date.now() });
     if (window.__codexPlusExtensionFailures.length > 100) window.__codexPlusExtensionFailures.shift();
   }
-  function installStyle() {
+function installStyle() {
     const existingStyle = document.getElementById(styleId);
     if (existingStyle?.dataset.codexDeleteStyleVersion === codexDeleteStyleVersion) return;
     existingStyle?.remove();
@@ -13040,26 +13040,64 @@
     return document.querySelector('[data-app-action-sidebar-section-heading="Projects"]');
   }
 
-  async function refreshRecentConversationsForHost() {
+  async function sendNativeSessionRequest(method, params) {
+    let timer;
+    let expired = false;
     try {
-      const signals = await loadOptionalCodexAppModule("app-server-manager-signals-");
-      const sendRequest = Object.values(signals || {}).find((candidate) => {
-        if (typeof candidate !== "function") return false;
-        try {
-          const source = Function.prototype.toString.call(candidate).replace(/\s+/g, "");
-          return /^function[$\w]+\(e,t\)\{return[$\w]+\.sendRequest\(e,t\)\}$/.test(source);
-        } catch {
-          return false;
+      const request = async () => {
+        // 26.730 把 dispatcher 导出在已加载的 app-initial 中；新版拆成 signals 模块。
+        // 优先已加载的模块，避免为不存在的分片扫描整个资产集合。
+        const names = codexAppAssetUrl("app-initial-") && !codexAppAssetUrl("app-server-manager-signals-")
+          ? ["app-initial-", "app-server-manager-signals-"]
+          : ["app-server-manager-signals-", "app-initial-"];
+        for (const name of names) {
+          const module = await loadOptionalCodexAppModule(name);
+          if (expired) return false;
+          const sendRequest = Object.values(module || {}).find((candidate) => {
+            if (typeof candidate !== "function" || ![2, 3].includes(candidate.length)) return false;
+            try {
+              const source = Function.prototype.toString.call(candidate).replace(/\s+/g, "");
+              return /^function[$\w]+\(e,t\)\{return[$\w]+\.sendRequest\(e,t\)\}$/.test(source)
+                || /^function[$\w]+\(e,t,n\)\{returnn==null\?([$\w]+)\.sendRequest\(e,t\):\1\.sendRequest\(e,t,n\)\}$/.test(source);
+            } catch {
+              return false;
+            }
+          });
+          if (typeof sendRequest !== "function") continue;
+          const result = await sendRequest(method, params);
+          return result !== false && !result?.error && result?.status !== "failed";
         }
-      });
-      if (typeof sendRequest !== "function") return false;
-      await sendRequest("refresh-recent-conversations-for-host", { hostId: "local", sortKey: "updated_at" });
-      return true;
+        return false;
+      };
+      return await Promise.race([
+        request(),
+        new Promise((resolve) => { timer = setTimeout(() => { expired = true; resolve(false); }, 2500); }),
+      ]);
     } catch (error) {
       window.__codexRecentConversationRefreshFailures = window.__codexRecentConversationRefreshFailures || [];
       window.__codexRecentConversationRefreshFailures.push(String(error?.stack || error));
+      window.__codexRecentConversationRefreshFailures.splice(0, Math.max(0, window.__codexRecentConversationRefreshFailures.length - 8));
       return false;
+    } finally {
+      expired = true;
+      clearTimeout(timer);
     }
+  }
+
+  async function refreshRecentConversationsForHost() {
+    return sendNativeSessionRequest("refresh-recent-conversations-for-host", { hostId: "local", sortKey: "updated_at" });
+  }
+
+  async function syncLocalSessionMutation(method, sessionId) {
+    if (!["thread/deleted", "thread/unarchived"].includes(method)) return false;
+    const threadId = normalizedCodexThreadUuid(sessionId);
+    if (!threadId) return false;
+    // 本地 SQLite 删除/撤销成功后，复用原生通知处理器同步缓存，不重复调用 thread/delete。
+    // 单独刷新 recent 列表不足以清除已加载会话，也可能被旧的刷新请求阻塞。
+    const notified = await sendNativeSessionRequest("handle-app-server-notification-for-host", {
+      hostId: "local", notification: { method, params: { threadId } },
+    });
+    return notified || await refreshRecentConversationsForHost();
   }
 
   /**
@@ -13124,8 +13162,8 @@
         toast.textContent = result.message || "撤销完成";
         if (result.status === "undone") {
           settings.onUndone?.();
-          const refreshed = await refreshRecentConversationsForHost();
-          if (!refreshed) window.location.reload();
+          const refreshed = await syncLocalSessionMutation("thread/unarchived", result.session_id);
+          if (!refreshed) toast.textContent += "；列表同步未完成，请手动刷新";
         }
         setTimeout(() => dismissCodexPlusToast(toast), 5000);
       });
@@ -13643,7 +13681,8 @@
             hideDeletedSessionRows(rawThreadId);
             hiddenRowIds = [rawThreadId];
           }
-          await refreshRecentConversationsForHost();
+          const synchronized = await syncLocalSessionMutation("thread/deleted", ref.session_id);
+          if (!synchronized) navigationNotice = "会话已从本地删除；列表同步未完成，请手动刷新";
         }
         showToast(navigationNotice || result.message || "删除成功", {
           undoToken: result.undo_token,
