@@ -19,6 +19,7 @@ const BACKUP_RETENTION_SECS: u64 = 7 * 24 * 60 * 60;
 pub struct BackupStore {
     root: PathBuf,
     file_byte_limit: Option<u64>,
+    automatic_pruning: bool,
     #[cfg(test)]
     fail_before_manifest: bool,
 }
@@ -49,9 +50,16 @@ impl BackupStore {
         Self {
             root: root.into(),
             file_byte_limit: None,
+            automatic_pruning: false,
             #[cfg(test)]
             fail_before_manifest: false,
         }
+    }
+
+    /// 定制版默认保留历史删除备份；只有调用方明确选择时才启用上游的自动回收。
+    pub fn with_automatic_pruning(mut self, enabled: bool) -> Self {
+        self.automatic_pruning = enabled;
+        self
     }
 
     /// 默认保留原有撤销能力；显式预算超限时拒绝删除，不自动清理历史备份。
@@ -161,10 +169,10 @@ impl BackupStore {
         )?;
         pending.committed = true;
         sync_file(&self.path_for(&token))?;
-        // 删除会话的撤销只发生在删除之后，旧备份没有长期价值；但历史上这里
-        // 从不清理，单份会话备份含全部消息时可以到 GB 级（issue #2544）。
-        // 清理失败不影响本次备份：调用方已拿到可用 token。
-        let _ = self.prune_retained_backups(&token);
+        if self.automatic_pruning {
+            // 显式启用时沿用上游回收规则；清理失败不影响本次已完成的备份。
+            let _ = self.prune_retained_backups(&token);
+        }
         Ok((token, entries))
     }
 
@@ -578,7 +586,7 @@ mod tests {
         // issue #2544：删除会话的备份从不清理，长期使用后目录可达 GB 级。
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("backups");
-        let store = BackupStore::new(&root);
+        let store = BackupStore::new(&root).with_automatic_pruning(true);
         fs::create_dir_all(&root).unwrap();
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
         let old_epoch = now - BACKUP_RETENTION_SECS - 3600;
@@ -618,7 +626,7 @@ mod tests {
         // 一次批量删除几十个会话：未超期的备份即使超过 10 份也全部保留。
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("backups");
-        let store = BackupStore::new(&root);
+        let store = BackupStore::new(&root).with_automatic_pruning(true);
         let tokens: Vec<_> = (0..15)
             .map(|_| store.write_backup("fixture", Path::new("fake.db"), json!({})).unwrap())
             .collect();
@@ -632,7 +640,7 @@ mod tests {
         // 已有 10 份「未来时间」的备份（时钟回拨后），新写的备份仍必须保留。
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("backups");
-        let store = BackupStore::new(&root);
+        let store = BackupStore::new(&root).with_automatic_pruning(true);
         fs::create_dir_all(&root).unwrap();
         let future = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() + 3600;
         for index in 0..10 {
@@ -640,5 +648,27 @@ mod tests {
         }
         let token = store.write_backup("fixture", Path::new("fake.db"), json!({})).unwrap();
         assert!(store.read_backup(&token).is_ok());
+    }
+
+    #[test]
+    fn default_store_preserves_old_manifests_and_blobs_when_writing_a_backup() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("backups");
+        let store = BackupStore::new(&root);
+        fs::create_dir_all(&root).unwrap();
+        let mut tokens = Vec::new();
+        for index in 0..15 {
+            let token = format!("1-{index:032x}");
+            fs::write(store.path_for(&token), b"{}").unwrap();
+            let blobs = root.join(format!("{token}.files"));
+            fs::create_dir(&blobs).unwrap();
+            fs::write(blobs.join("original.blob"), b"preserve me").unwrap();
+            tokens.push(token);
+        }
+        store.write_backup("fixture", Path::new("fake.db"), json!({})).unwrap();
+        for token in tokens {
+            assert!(store.path_for(&token).is_file());
+            assert_eq!(fs::read(root.join(format!("{token}.files/original.blob"))).unwrap(), b"preserve me");
+        }
     }
 }
