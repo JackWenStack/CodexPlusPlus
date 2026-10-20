@@ -239,8 +239,8 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background: var(--modal-backdrop-dim-shadow, rgba(0,0,0,.32));
-        backdrop-filter: blur(1px);
+        background: rgba(0,0,0,.18);
+        backdrop-filter: blur(2px);
       }
       .codex-delete-confirm-content {
         width: min(420px, calc(100vw - 48px));
@@ -1171,7 +1171,6 @@
         padding: 6px 8px;
         box-shadow: var(--tooltip-box-shadow, var(--shadow-200, 0 4px 12px rgba(0,0,0,.14)));
       }
-      .codex-delete-confirm-overlay,
       .codex-plus-modal-overlay { background: var(--color-background-surface-under, rgba(0,0,0,.32)); backdrop-filter: blur(1px); }
       .codex-delete-confirm-content,
       .codex-plus-modal-content {
@@ -1181,6 +1180,10 @@
         color: var(--codex-plus-text);
         font-family: inherit;
         box-shadow: var(--shadow-400, 0 16px 48px rgba(0,0,0,.2));
+      }
+      .codex-delete-confirm-content {
+        background: color-mix(in srgb, var(--codex-plus-bg-primary) 82%, transparent);
+        backdrop-filter: blur(16px);
       }
       .codex-delete-confirm-message,
       .codex-plus-row-description,
