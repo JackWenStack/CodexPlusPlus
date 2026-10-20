@@ -63,7 +63,11 @@ fn manager_close_minimizes_to_tray_without_confirmation() {
     assert!(!lib_rs.contains("manager://close-requested"));
     assert!(lib_rs.contains("let _ = close_event_window.hide();"));
     assert!(!lib_rs.contains("startup_is_transient()"));
-    assert!(lib_rs.contains(".visible(true)"));
+    // 手动启动显示窗口；自启动尊重“最小化”偏好，不应恢复旧的强制显示行为。
+    assert!(lib_rs.contains("let start_minimized = autostart"));
+    assert!(lib_rs.contains("codex_plus_core::watcher::watcher_start_minimized()"));
+    assert!(lib_rs.contains(".visible(!start_minimized)"));
+    assert!(lib_rs.contains(".focused(!start_minimized)"));
     assert!(lib_rs.contains("codex_plus_launcher::shutdown()"));
     assert!(!app_tsx.contains("CloseConfirmDialog"));
     assert!(app_tsx.contains("manager_exit_app"));
