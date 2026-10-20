@@ -31,8 +31,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
+          key: windows-native-v1
           cache-on-failure: true
           cache-workspace-crates: true
+      - name: Prepare native speech libraries outside the Rust cache
+        shell: pwsh
+        run: ./scripts/prepare-windows-native.ps1 -Destination "$env:RUNNER_TEMP/codex-native"
       - name: Validate release tag
         if: inputs.tag != ''
         shell: pwsh
