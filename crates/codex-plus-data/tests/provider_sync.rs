@@ -1008,6 +1008,8 @@ fn provider_sync_skips_rollout_locked_after_planning() {
     let rollout = home.join("sessions/rollout-locked.jsonl");
     write_rollout(&rollout, "openai", "thread-1", "C:/workspace");
     let original_rollout = fs::read(&rollout).unwrap();
+    let writable_rollout = home.join("sessions/rollout-writable.jsonl");
+    write_rollout(&writable_rollout, "openai", "thread-2", "C:/workspace");
     let mut held_rollout: Option<fs::File> = None;
 
     let result = run_provider_sync_with_target_and_progress(Some(&home), None, |event| {
@@ -1024,9 +1026,13 @@ fn provider_sync_skips_rollout_locked_after_planning() {
 
     assert!(held_rollout.is_some());
     drop(held_rollout);
-    assert_eq!(result.status, ProviderSyncStatus::Synced);
+    assert_eq!(result.status, ProviderSyncStatus::Synced, "{result:?}");
     assert!(result.skipped_locked_rollout_files.contains(&rollout));
     assert_eq!(fs::read(&rollout).unwrap(), original_rollout);
+    assert_eq!(result.changed_session_files, 1);
+    let rewritten = fs::read_to_string(&writable_rollout).unwrap();
+    let meta: serde_json::Value = serde_json::from_str(rewritten.lines().next().unwrap()).unwrap();
+    assert_eq!(meta["payload"]["model_provider"], "apigather");
 }
 
 #[test]
