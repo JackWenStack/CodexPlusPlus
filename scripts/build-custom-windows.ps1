@@ -34,7 +34,7 @@ try {
     if (-not $SkipTests) {
         Run-Checked 'node' @('--test', 'scripts/custom-release.test.mjs')
         Run-Checked 'npm.cmd' @('--prefix', 'apps/codex-plus-manager', 'test')
-        Run-Checked 'cargo' @('test', '--locked', '--workspace')
+        Run-Checked 'cargo' @('test', '--locked', '--workspace', '--no-fail-fast')
     }
     Run-Checked 'cargo' @('build', '--locked', '--release', '-p', 'codex-plus-manager', '--bin', 'codex-plus-plus')
     $targetRoot = if ($env:CARGO_TARGET_DIR) { [IO.Path]::GetFullPath($env:CARGO_TARGET_DIR) } else { Join-Path $repoRoot 'target' }
