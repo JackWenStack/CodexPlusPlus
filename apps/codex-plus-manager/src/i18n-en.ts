@@ -824,6 +824,7 @@ export const EN_PLAIN: Record<string, string> = {
   "压缩上下文大小": "Compaction context size",
   "原生菜单栏位置": "Native menu bar placement",
   "反馈问题": "Report an issue",
+  "上游问题反馈": "Report an upstream issue",
   "发现": "Discovered",
   "发送 hi 测试": "Send a 'hi' test",
   "取消": "Cancel",

@@ -422,7 +422,7 @@
   // Codex 的界面缩放是给内层布局节点设 CSS zoom，不是改 documentElement。
   // 我们的 overlay 挂在 body 下、落在那棵缩放子树之外，只能自己读这个变量跟随。
   const codexPlusWindowZoomVar = "--codex-window-zoom";
-  const codexDeleteVersion = "8";
+  const codexDeleteVersion = "9";
   const codexExportVersion = "1";
   const codexActionGroupVersion = "6";
   const codexArchiveRowActionsVersion = "1";

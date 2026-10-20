@@ -34,7 +34,7 @@ Set-Location 'F:\CodexPlusPlus'
 ./scripts/build-custom-windows.ps1
 ```
 
-构建产物位于 `dist/windows/app/codex-plus-plus.exe`。使用独立的 `CODEX_HOME`、`CODEX_PLUS_STATE_DIR`、guard 端口和 WebView 数据目录进行测试；实际用户目录不作为测试夹具。涉及可见交互时，在真实桌面 WebView 验收。不要把 `auth.json`、`config.toml`、会话、个人背景图或本机诊断文件提交到仓库。
+构建产物位于 `dist/windows/app/codex-plus-plus.exe`。使用独立的 `CODEX_HOME`、`CODEX_PLUS_STATE_DIR`、guard 端口和 WebView 数据目录进行测试；实际用户目录不作为测试夹具。测试窗口标题和页面内必须标注“隔离测试”，避免将空白测试供应商列表误认为正式配置丢失。涉及可见交互时，在真实桌面 WebView 验收。不要把 `auth.json`、`config.toml`、会话、个人背景图或本机诊断文件提交到仓库。
 
 ## 按需同步上游
 
