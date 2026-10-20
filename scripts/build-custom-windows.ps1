@@ -32,9 +32,21 @@ try {
     # Tauri 的 generate_context! 在 cargo test 编译阶段也需要 frontendDist。
     Run-Checked 'npm.cmd' @('--prefix', 'apps/codex-plus-manager', 'run', 'vite:build')
     if (-not $SkipTests) {
-        Run-Checked 'node' @('--test', 'scripts/custom-release.test.mjs')
-        Run-Checked 'npm.cmd' @('--prefix', 'apps/codex-plus-manager', 'test')
-        Run-Checked 'cargo' @('test', '--locked', '--workspace', '--no-fail-fast')
+        # 部分集成测试会调用默认状态路径；不能继承开发者的供应商、皮肤和会话目录。
+        $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('codex-plus-build-tests-' + [guid]::NewGuid())
+        $previousCodexHome = $env:CODEX_HOME
+        $previousStateDir = $env:CODEX_PLUS_STATE_DIR
+        try {
+            $env:CODEX_HOME = Join-Path $testRoot '.codex'
+            $env:CODEX_PLUS_STATE_DIR = Join-Path $testRoot '.codex-session-delete'
+            New-Item -ItemType Directory -Force -Path $env:CODEX_HOME, $env:CODEX_PLUS_STATE_DIR | Out-Null
+            Run-Checked 'node' @('--test', 'scripts/custom-release.test.mjs')
+            Run-Checked 'npm.cmd' @('--prefix', 'apps/codex-plus-manager', 'test')
+            Run-Checked 'cargo' @('test', '--locked', '--workspace', '--no-fail-fast')
+        } finally {
+            $env:CODEX_HOME = $previousCodexHome
+            $env:CODEX_PLUS_STATE_DIR = $previousStateDir
+        }
     }
     Run-Checked 'cargo' @('build', '--locked', '--release', '-p', 'codex-plus-manager', '--bin', 'codex-plus-plus')
     $targetRoot = if ($env:CARGO_TARGET_DIR) { [IO.Path]::GetFullPath($env:CARGO_TARGET_DIR) } else { Join-Path $repoRoot 'target' }

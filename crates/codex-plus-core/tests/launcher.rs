@@ -242,7 +242,23 @@ fn app_paths_resolves_portable_current_link_to_directory_version() {
     std::fs::create_dir_all(&target).unwrap();
     std::fs::write(target.join("Codex.exe"), "").unwrap();
     std::fs::write(target.join("version"), "42.1.0\n").unwrap();
-    std::os::windows::fs::symlink_dir(&target, &current).unwrap();
+    if let Err(error) = std::os::windows::fs::symlink_dir(&target, &current) {
+        assert_eq!(error.raw_os_error(), Some(1314), "{error}");
+        // 普通 Windows 用户可能没有软链权限；目录 junction 同样验证 current 的解析，
+        // 且不需要提权或修改开发者模式。路径通过子进程环境传递，不拼接 shell 代码。
+        let status = std::process::Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "$ErrorActionPreference='Stop'; New-Item -ItemType Junction -Path $env:CODEX_TEST_CURRENT_LINK -Target $env:CODEX_TEST_VERSION_TARGET | Out-Null",
+            ])
+            .env("CODEX_TEST_CURRENT_LINK", &current)
+            .env("CODEX_TEST_VERSION_TARGET", &target)
+            .status()
+            .unwrap();
+        assert!(status.success(), "create portable current directory junction");
+    }
 
     assert_eq!(
         codex_app_version(&current).as_deref(),

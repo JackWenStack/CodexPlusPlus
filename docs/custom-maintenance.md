@@ -26,6 +26,8 @@ pwsh -File scripts/build-custom-windows.ps1
 
 需要 Node.js 22 或更高版本、Rust MSVC 工具链、MSVC C++ 构建工具和 Windows SDK。`-Package` 另外要求 NSIS。脚本执行前端类型检查、前后端测试、构建；`-SkipTests` 仅用于相同源码已经完成适用测试时。
 
+构建脚本为测试分配独立的临时 `CODEX_HOME` 和 `CODEX_PLUS_STATE_DIR`，结束后恢复调用环境。直接运行集成测试时也必须隔离这两个目录，避免默认路径读取正式皮肤备份或其他用户状态。
+
 本机已有的隔离构建工具可以这样复用；这些环境变量只作用于当前 PowerShell：
 
 ```powershell
