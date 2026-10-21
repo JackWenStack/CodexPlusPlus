@@ -907,6 +907,7 @@
   }
 
   function scanDeferred() {
+    pruneSessionMoreMenus();
     restoreLegacyPluginBuildFlavorFilter();
     if (codexPluginMarketplacePatchEnabled()) {
       const pluginUnlockStrategy = codexPluginUnlockStrategy();

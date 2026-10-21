@@ -424,7 +424,7 @@
   const codexPlusWindowZoomVar = "--codex-window-zoom";
   const codexDeleteVersion = "9";
   const codexExportVersion = "1";
-  const codexActionGroupVersion = "6";
+  const codexActionGroupVersion = "7";
   const codexArchiveRowActionsVersion = "1";
   const codexArchiveDeleteAllVersion = "2";
   const codexConversationViewVersion = "1";
@@ -14749,9 +14749,50 @@
     })), force);
   }
 
+  function disposeSessionMoreMenu(menu) {
+    const row = menu.__codexSessionMoreRow;
+    const group = menu.__codexSessionMoreGroup;
+    menu.hidden = true;
+    menu.__codexSessionMoreCleanup?.();
+    row?.classList.remove("codex-session-more-open");
+    group?.querySelector(`.${moreButtonClass}`)?.setAttribute("aria-expanded", "false");
+    menu.querySelectorAll("button").forEach((item) => {
+      delete item.__codexSessionCopyRow;
+      delete item.__codexSessionAutoRenameRow;
+    });
+    delete menu.__codexSessionMoreCleanup;
+    delete menu.__codexSessionMoreRow;
+    delete menu.__codexSessionMoreGroup;
+    menu.replaceChildren();
+    menu.remove();
+    // 被移到其他行的旧按钮组也不能继续持有旧行和菜单的事件闭包。
+    group?.remove();
+  }
+
+  function sessionMoreMenuOwnerDetached(menu) {
+    const row = menu.__codexSessionMoreRow;
+    const group = menu.__codexSessionMoreGroup;
+    // 公共类名可能被扩展复用，只回收带内部归属信息的菜单。
+    return !!(row || group) && (!row?.isConnected || !group?.isConnected || !row.contains(group));
+  }
+
+  function pruneSessionMoreMenus() {
+    document.querySelectorAll(`.${moreMenuClass}`).forEach((menu) => {
+      if (sessionMoreMenuOwnerDetached(menu)) disposeSessionMoreMenu(menu);
+    });
+  }
+
+  window.__codexPlusSessionMoreMenusCleanup?.();
+  window.__codexPlusSessionMoreMenusCleanup = () => {
+    document.querySelectorAll(`.${moreMenuClass}`).forEach((menu) => {
+      if (menu.__codexSessionMoreRow || menu.__codexSessionMoreGroup) disposeSessionMoreMenu(menu);
+    });
+  };
+  pruneSessionMoreMenus();
+
   function removeActionGroups(row) {
     document.querySelectorAll(`.${moreMenuClass}`).forEach((menu) => {
-      if (menu.__codexSessionMoreRow === row) menu.remove();
+      if (menu.__codexSessionMoreRow === row) disposeSessionMoreMenu(menu);
     });
     row.querySelectorAll(`.${actionGroupClass}`).forEach((group) => group.remove());
   }
@@ -14794,6 +14835,10 @@
 
   function closeSessionMoreMenus(exceptMenu = null) {
     document.querySelectorAll(`.${moreMenuClass}`).forEach((menu) => {
+      if (sessionMoreMenuOwnerDetached(menu)) {
+        disposeSessionMoreMenu(menu);
+        return;
+      }
       if (menu !== exceptMenu) {
         menu.hidden = true;
         menu.closest?.("[data-codex-delete-row]")?.classList.remove("codex-session-more-open");
@@ -14811,9 +14856,12 @@
   }
 
   function installSessionMoreMenuAutoClose(row, menu) {
+    menu.__codexSessionMoreCleanup?.();
     const group = menu.__codexSessionMoreGroup || menu.closest?.(`.${actionGroupClass}`);
+    const closeTimers = new Set();
     const closeIfOutside = () => {
-      window.setTimeout(() => {
+      const timer = window.setTimeout(() => {
+        closeTimers.delete(timer);
         if (menu.hidden) return;
         const active = document.activeElement;
         if (group?.matches?.(":hover") || menu.matches?.(":hover") || menu.contains(active)) return;
@@ -14821,10 +14869,18 @@
         row.classList.remove("codex-session-more-open");
         group?.querySelector?.(`.${moreButtonClass}`)?.setAttribute("aria-expanded", "false");
       }, 80);
+      closeTimers.add(timer);
     };
     group?.addEventListener("pointerleave", closeIfOutside, true);
     menu.addEventListener("pointerleave", closeIfOutside, true);
     menu.addEventListener("focusout", closeIfOutside, true);
+    menu.__codexSessionMoreCleanup = () => {
+      closeTimers.forEach((timer) => window.clearTimeout(timer));
+      closeTimers.clear();
+      group?.removeEventListener("pointerleave", closeIfOutside, true);
+      menu.removeEventListener("pointerleave", closeIfOutside, true);
+      menu.removeEventListener("focusout", closeIfOutside, true);
+    };
   }
 
   function updateSessionMoreMenuDirection(button, menu) {
@@ -18179,6 +18235,7 @@
   }
 
   function scanDeferred() {
+    pruneSessionMoreMenus();
     restoreLegacyPluginBuildFlavorFilter();
     if (codexPluginMarketplacePatchEnabled()) {
       const pluginUnlockStrategy = codexPluginUnlockStrategy();
