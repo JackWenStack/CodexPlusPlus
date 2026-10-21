@@ -442,7 +442,7 @@
   const codexAppServerClientCaptureMarker = "AppServerRequestClient is missing a message dispatcher";
   const codexAppServerClientCaptureAnchor = "async sendRequest(";
   const codexRemoteSessionRecoveryVersion = "8";
-  const codexPluginMarketplaceUnlockVersion = "17";
+  const codexPluginMarketplaceUnlockVersion = "18";
   const codexThreadScrollMaxEntries = 120;
   const codexThreadScrollSaveThrottleMs = 120;
   const codexThreadScrollRestoreWindowMs = 3200;
@@ -4324,6 +4324,9 @@
   }
 
   function cleanupDreamSkin() {
+    // 首次清理兼容旧注入的残留；之后仅在皮肤重新激活/外部运行时出现时再遍历 DOM。
+    if (window.__CODEX_PLUS_DREAM_SKIN_CLEANED__
+        && !window.__CODEX_DREAM_SKIN_STATE__ && !window.__CODEX_GLASS_VISION_SKIN_STATE__) return;
     window.__CODEX_DREAM_SKIN_DISABLED__ = true;
     const state = window.__CODEX_DREAM_SKIN_STATE__;
     if (typeof state?.cleanup === "function" && state.cleanup !== cleanupDreamSkin) {
@@ -4353,6 +4356,7 @@
     }
     delete window.__CODEX_GLASS_VISION_SKIN_STATE__;
     clearDreamSkinPresentation();
+    window.__CODEX_PLUS_DREAM_SKIN_CLEANED__ = true;
   }
 
   window.__CODEX_PLUS_CLEAR_DREAM_SKIN__ = cleanupDreamSkin;
@@ -4574,6 +4578,7 @@
 
   function refreshDreamSkin() {
     const settings = codexPlusSettings();
+    if (settings.dreamSkinEnabled && !settings.dreamSkinPaused) window.__CODEX_PLUS_DREAM_SKIN_CLEANED__ = false;
     if (settings.dreamSkinEnabled && !settings.dreamSkinPaused) ensureDreamSkinMainSurface();
     if (window.__CODEX_PLUS_EXTERNAL_DREAM_SKIN_RUNTIME__) {
       if (codexPlusBackendSettingsLoaded && (!settings.dreamSkinEnabled || settings.dreamSkinPaused)) {
@@ -8142,43 +8147,20 @@
       && (Array.isArray(filtered) ? !filtered.includes(marketplace) : !callback(marketplace)));
   }
 
-  function installPluginBuildFlavorFilterPatch() {
-    if (window.__codexPluginBuildFlavorFilterPatch === codexPluginMarketplaceUnlockVersion) return;
-    if (!codexPluginMarketplacePatchEnabled()) return;
-    const originalFilter = Array.prototype.__codexPluginBuildFlavorOriginalFilter || Array.prototype.filter;
-    if (!Array.prototype.__codexPluginBuildFlavorOriginalFilter) {
-      Object.defineProperty(Array.prototype, "__codexPluginBuildFlavorOriginalFilter", {
-        value: originalFilter,
-        configurable: true,
-        writable: true,
-      });
+  // 旧版注入曾修改整个页面的 Array.prototype；热更新和关闭功能时均恢复。
+  // 插件扩展仅通过 62-plugin-market-adapter 的请求/响应与独立目录完成。
+  function restoreLegacyPluginBuildFlavorFilter() {
+    const current = Array.prototype.filter;
+    const original = Array.prototype.__codexPluginBuildFlavorOriginalFilter;
+    if (current?.__codexPluginBuildFlavorPatched && typeof original === "function") {
+      Array.prototype.filter = original;
+      delete Array.prototype.__codexPluginBuildFlavorOriginalFilter;
+      sendCodexPlusDiagnostic("plugin_global_filter_restored", {});
     }
-    if (Array.prototype.filter.__codexPluginBuildFlavorPatched === codexPluginMarketplaceUnlockVersion) {
-      window.__codexPluginBuildFlavorFilterPatch = codexPluginMarketplaceUnlockVersion;
-      return;
-    }
-    const patchedFilter = function codexPluginBuildFlavorFilterPatch(callback, thisArg) {
-      const filtered = originalFilter.call(this, callback, thisArg);
-      if (filtered.length === this.length) return filtered;
-      if (isCodexPluginBuildFlavorFilter(callback, this, filtered)) {
-        sendCodexPlusDiagnostic("plugin_build_flavor_filter_bypassed", { pluginCount: this.length });
-        return Array.from(this);
-      }
-      if (isCodexPluginMarketplaceHiddenFilter(callback, this, filtered)) {
-        sendCodexPlusDiagnostic("plugin_marketplace_hidden_filter_bypassed", { marketplaceCount: this.length });
-        return Array.from(this);
-      }
-      if (isCodexPluginFeaturedFilter(callback, this, filtered)) {
-        sendCodexPlusDiagnostic("plugin_featured_filter_bypassed", { featuredCount: this.length });
-        return Array.from(this);
-      }
-      return filtered;
-    };
-    patchedFilter.__codexPluginBuildFlavorPatched = codexPluginMarketplaceUnlockVersion;
-    Array.prototype.filter = patchedFilter;
-    window.__codexPluginBuildFlavorFilterPatch = codexPluginMarketplaceUnlockVersion;
-    sendCodexPlusDiagnostic("plugin_build_flavor_filter_patch_installed", {});
+    delete window.__codexPluginBuildFlavorFilterPatch;
   }
+
+  restoreLegacyPluginBuildFlavorFilter();
 
   function restorePluginMarketplaceRequestParams(params, method = "") {
     if (!params || typeof params !== "object") return params;
@@ -15196,6 +15178,13 @@
     runtimeStarted: false,
     moObserved: false,
     targetsReported: false,
+    targetsDirty: true,
+    contentParent: null,
+    composerParent: null,
+    contentScope: null,
+    lastLayout: null,
+    stableFrames: 0,
+    appliedOffsets: new WeakMap(),
     observed: new WeakSet(),
     elements: new Set(),
   };
@@ -15528,6 +15517,12 @@
   }
 
   function conversationViewResolveTargets() {
+    if (!conversationViewState.targetsDirty
+        && (!conversationViewState.contentEl || conversationViewState.contentEl.isConnected)
+        && (!conversationViewState.composerEl || conversationViewState.composerEl.isConnected)
+        && conversationViewState.contentEl?.parentElement === conversationViewState.contentParent
+        && conversationViewState.composerEl?.parentElement === conversationViewState.composerParent
+        && conversationViewState.contentEl?.closest?.(conversationViewScrollContainerSelector) === conversationViewState.contentScope) return;
     for (const [key, next] of [
       ["contentEl", conversationViewFindContentEl()],
       ["composerEl", conversationViewFindComposerEl()],
@@ -15544,6 +15539,11 @@
       }
       conversationViewState[key] = next;
     }
+    conversationViewState.targetsDirty = false;
+    conversationViewState.contentParent = conversationViewState.contentEl?.parentElement;
+    conversationViewState.composerParent = conversationViewState.composerEl?.parentElement;
+    conversationViewState.contentScope = conversationViewState.contentEl?.closest?.(conversationViewScrollContainerSelector);
+    conversationViewState.lastLayout = null;
     [
       document.documentElement,
       document.body,
@@ -15565,7 +15565,7 @@
     ].filter((el) => el?.isConnected);
     if (!targets.length) {
       conversationViewReportMissingTargets();
-      return;
+      return true;
     }
     conversationViewState.targetsReported = false;
     // 三阶段批量对齐，全程不出现读-写交替（否则退回 commit 82fb0924 修掉的强制重排）：
@@ -15575,22 +15575,36 @@
     // #2085 的自适应计算落在 ①，写动作仍集中在 ②，与原有两阶段结构一致。
     const availableWidths = targets.map((el) => conversationViewAvailableWidth(el));
     const effectiveWidths = availableWidths.map((width) => conversationViewEffectiveWidth(width));
+    const before = targets.map((el) => ({ rect: el.getBoundingClientRect(), bounds: conversationViewSessionRectFor(el) }));
+    const center = conversationViewHtmlCenter();
+    const layout = JSON.stringify([center, ...before.flatMap((item, index) => [
+      item.bounds?.left, item.bounds?.width, item.rect.width,
+      Math.round((item.rect.left - (parseFloat(targets[index].style.left) || 0)) * 10) / 10, effectiveWidths[index],
+    ])]);
+    const offsetsIntact = targets.every((el) => {
+      const applied = conversationViewState.appliedOffsets.get(el);
+      return applied && applied.left === el.style.left && applied.transform === el.style.transform;
+    });
+    if (layout === conversationViewState.lastLayout && offsetsIntact) return true;
     targets.forEach((el, index) => {
       conversationViewApplyNativeWidth(el, effectiveWidths[index]);
       conversationViewResetOwnOffset(el);
     });
     const htmlCenter = conversationViewHtmlCenter();
-    targets.forEach((el) => {
+    const offsets = targets.map((el) => {
       const nativeRect = el.getBoundingClientRect();
       const bounds = conversationViewSessionRectFor(el);
-      if (!conversationViewHasRoomForHtmlCenterAt(nativeRect, bounds, htmlCenter)) return;
+      if (!conversationViewHasRoomForHtmlCenterAt(nativeRect, bounds, htmlCenter)) return null;
       const targetLeft = htmlCenter - nativeRect.width / 2;
       const delta = targetLeft - nativeRect.left;
-      if (Math.abs(delta) > 0.5) {
-        const nextLeft = `${delta.toFixed(2)}px`;
-        if (el.style.left !== nextLeft) el.style.left = nextLeft;
-      }
+      return Math.abs(delta) > 0.5 ? `${delta.toFixed(2)}px` : null;
     });
+    targets.forEach((el, index) => {
+      if (offsets[index] !== null && el.style.left !== offsets[index]) el.style.left = offsets[index];
+      conversationViewState.appliedOffsets.set(el, { left: el.style.left, transform: el.style.transform });
+    });
+    conversationViewState.lastLayout = layout;
+    return false;
   }
 
   /**
@@ -15620,12 +15634,15 @@
 
   function scheduleConversationViewAlign(frames = 16) {
     conversationViewState.settleFramesLeft = Math.max(conversationViewState.settleFramesLeft, frames);
+    conversationViewState.stableFrames = 0;
     if (conversationViewState.rafId) return;
     const tick = () => {
       conversationViewState.rafId = 0;
-      conversationViewAlignNow();
+      if (!codexPlusSettings().conversationView) return;
+      const stable = conversationViewAlignNow();
+      conversationViewState.stableFrames = stable ? conversationViewState.stableFrames + 1 : 0;
       conversationViewState.settleFramesLeft -= 1;
-      if (conversationViewState.settleFramesLeft > 0) {
+      if (conversationViewState.settleFramesLeft > 0 && conversationViewState.stableFrames < 2) {
         conversationViewState.rafId = requestAnimationFrame(tick);
       }
     };
@@ -15648,6 +15665,11 @@
     conversationViewState.elements.clear();
     conversationViewState.contentEl = null;
     conversationViewState.composerEl = null;
+    conversationViewState.targetsDirty = true;
+    conversationViewState.lastLayout = null;
+    conversationViewState.stableFrames = 0;
+    conversationViewState.settleFramesLeft = 0;
+    conversationViewState.appliedOffsets = new WeakMap();
   }
 
   window.__codexPlusConversationViewCleanup = cleanupConversationView;
@@ -17251,7 +17273,25 @@
   function ensureConversationViewRuntime() {
     if (conversationViewState.runtimeStarted) return;
     conversationViewState.ro = conversationViewState.ro || new ResizeObserver(() => scheduleConversationViewAlign());
-    conversationViewState.mo = conversationViewState.mo || new MutationObserver(() => scheduleConversationViewAlign());
+    conversationViewState.mo = conversationViewState.mo || new MutationObserver((records) => {
+      const targets = [conversationViewState.contentEl, conversationViewState.composerEl].filter(Boolean);
+      const relevant = records.some((record) => {
+        const node = record.target;
+        if (node.closest?.(`${conversationViewPaneBoundarySelector}, [data-codex-plus-ext]`)) return false;
+        // 正文内部流式输出由 ResizeObserver 处理；不因消息类名/子节点变化重扫长会话。
+        if (targets.some((target) => target.contains(node) && (target !== node || record.type === "childList"))) return false;
+        if (targets.some((target) => !target.isConnected)) return true;
+        if (record.type !== "childList") return targets.length < 2
+          || targets.some((target) => node === target || node.contains?.(target));
+        const anchors = `${conversationViewScrollContainerSelector}, ${conversationViewFooterSelector}, [data-codex-composer-root]`;
+        return targets.length < 2 || [...record.addedNodes, ...record.removedNodes].some((child) =>
+          child.matches?.(anchors) || child.querySelector?.(anchors)
+          || targets.some((target) => child === target || child.contains?.(target)));
+      });
+      if (!relevant) return;
+      conversationViewState.targetsDirty = true;
+      scheduleConversationViewAlign();
+    });
     if (document.body && !conversationViewState.moObserved) {
       conversationViewState.mo.observe(document.body, {
         childList: true,
@@ -18139,13 +18179,13 @@
   }
 
   function scanDeferred() {
+    restoreLegacyPluginBuildFlavorFilter();
     if (codexPluginMarketplacePatchEnabled()) {
       const pluginUnlockStrategy = codexPluginUnlockStrategy();
       const settings = codexPlusSettings();
       logCodexPluginUnlockStrategy(pluginUnlockStrategy);
       if ((pluginUnlockStrategy === "modern" || pluginUnlockStrategy === "unknown") && settings.pluginMarketplaceUnlock) {
         const marketplaceRequestPatchStrategy = codexPluginMarketplaceRequestPatchStrategy();
-        installPluginBuildFlavorFilterPatch();
         if (marketplaceRequestPatchStrategy === "bridge") {
           installPluginMarketplaceBridgePatch();
         } else if (marketplaceRequestPatchStrategy === "client") {

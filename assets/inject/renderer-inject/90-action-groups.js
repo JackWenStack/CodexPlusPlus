@@ -433,6 +433,13 @@
     runtimeStarted: false,
     moObserved: false,
     targetsReported: false,
+    targetsDirty: true,
+    contentParent: null,
+    composerParent: null,
+    contentScope: null,
+    lastLayout: null,
+    stableFrames: 0,
+    appliedOffsets: new WeakMap(),
     observed: new WeakSet(),
     elements: new Set(),
   };
@@ -765,6 +772,12 @@
   }
 
   function conversationViewResolveTargets() {
+    if (!conversationViewState.targetsDirty
+        && (!conversationViewState.contentEl || conversationViewState.contentEl.isConnected)
+        && (!conversationViewState.composerEl || conversationViewState.composerEl.isConnected)
+        && conversationViewState.contentEl?.parentElement === conversationViewState.contentParent
+        && conversationViewState.composerEl?.parentElement === conversationViewState.composerParent
+        && conversationViewState.contentEl?.closest?.(conversationViewScrollContainerSelector) === conversationViewState.contentScope) return;
     for (const [key, next] of [
       ["contentEl", conversationViewFindContentEl()],
       ["composerEl", conversationViewFindComposerEl()],
@@ -781,6 +794,11 @@
       }
       conversationViewState[key] = next;
     }
+    conversationViewState.targetsDirty = false;
+    conversationViewState.contentParent = conversationViewState.contentEl?.parentElement;
+    conversationViewState.composerParent = conversationViewState.composerEl?.parentElement;
+    conversationViewState.contentScope = conversationViewState.contentEl?.closest?.(conversationViewScrollContainerSelector);
+    conversationViewState.lastLayout = null;
     [
       document.documentElement,
       document.body,
@@ -802,7 +820,7 @@
     ].filter((el) => el?.isConnected);
     if (!targets.length) {
       conversationViewReportMissingTargets();
-      return;
+      return true;
     }
     conversationViewState.targetsReported = false;
     // 三阶段批量对齐，全程不出现读-写交替（否则退回 commit 82fb0924 修掉的强制重排）：
@@ -812,22 +830,36 @@
     // #2085 的自适应计算落在 ①，写动作仍集中在 ②，与原有两阶段结构一致。
     const availableWidths = targets.map((el) => conversationViewAvailableWidth(el));
     const effectiveWidths = availableWidths.map((width) => conversationViewEffectiveWidth(width));
+    const before = targets.map((el) => ({ rect: el.getBoundingClientRect(), bounds: conversationViewSessionRectFor(el) }));
+    const center = conversationViewHtmlCenter();
+    const layout = JSON.stringify([center, ...before.flatMap((item, index) => [
+      item.bounds?.left, item.bounds?.width, item.rect.width,
+      Math.round((item.rect.left - (parseFloat(targets[index].style.left) || 0)) * 10) / 10, effectiveWidths[index],
+    ])]);
+    const offsetsIntact = targets.every((el) => {
+      const applied = conversationViewState.appliedOffsets.get(el);
+      return applied && applied.left === el.style.left && applied.transform === el.style.transform;
+    });
+    if (layout === conversationViewState.lastLayout && offsetsIntact) return true;
     targets.forEach((el, index) => {
       conversationViewApplyNativeWidth(el, effectiveWidths[index]);
       conversationViewResetOwnOffset(el);
     });
     const htmlCenter = conversationViewHtmlCenter();
-    targets.forEach((el) => {
+    const offsets = targets.map((el) => {
       const nativeRect = el.getBoundingClientRect();
       const bounds = conversationViewSessionRectFor(el);
-      if (!conversationViewHasRoomForHtmlCenterAt(nativeRect, bounds, htmlCenter)) return;
+      if (!conversationViewHasRoomForHtmlCenterAt(nativeRect, bounds, htmlCenter)) return null;
       const targetLeft = htmlCenter - nativeRect.width / 2;
       const delta = targetLeft - nativeRect.left;
-      if (Math.abs(delta) > 0.5) {
-        const nextLeft = `${delta.toFixed(2)}px`;
-        if (el.style.left !== nextLeft) el.style.left = nextLeft;
-      }
+      return Math.abs(delta) > 0.5 ? `${delta.toFixed(2)}px` : null;
     });
+    targets.forEach((el, index) => {
+      if (offsets[index] !== null && el.style.left !== offsets[index]) el.style.left = offsets[index];
+      conversationViewState.appliedOffsets.set(el, { left: el.style.left, transform: el.style.transform });
+    });
+    conversationViewState.lastLayout = layout;
+    return false;
   }
 
   /**
@@ -857,12 +889,15 @@
 
   function scheduleConversationViewAlign(frames = 16) {
     conversationViewState.settleFramesLeft = Math.max(conversationViewState.settleFramesLeft, frames);
+    conversationViewState.stableFrames = 0;
     if (conversationViewState.rafId) return;
     const tick = () => {
       conversationViewState.rafId = 0;
-      conversationViewAlignNow();
+      if (!codexPlusSettings().conversationView) return;
+      const stable = conversationViewAlignNow();
+      conversationViewState.stableFrames = stable ? conversationViewState.stableFrames + 1 : 0;
       conversationViewState.settleFramesLeft -= 1;
-      if (conversationViewState.settleFramesLeft > 0) {
+      if (conversationViewState.settleFramesLeft > 0 && conversationViewState.stableFrames < 2) {
         conversationViewState.rafId = requestAnimationFrame(tick);
       }
     };
@@ -885,6 +920,11 @@
     conversationViewState.elements.clear();
     conversationViewState.contentEl = null;
     conversationViewState.composerEl = null;
+    conversationViewState.targetsDirty = true;
+    conversationViewState.lastLayout = null;
+    conversationViewState.stableFrames = 0;
+    conversationViewState.settleFramesLeft = 0;
+    conversationViewState.appliedOffsets = new WeakMap();
   }
 
   window.__codexPlusConversationViewCleanup = cleanupConversationView;

@@ -1,7 +1,25 @@
   function ensureConversationViewRuntime() {
     if (conversationViewState.runtimeStarted) return;
     conversationViewState.ro = conversationViewState.ro || new ResizeObserver(() => scheduleConversationViewAlign());
-    conversationViewState.mo = conversationViewState.mo || new MutationObserver(() => scheduleConversationViewAlign());
+    conversationViewState.mo = conversationViewState.mo || new MutationObserver((records) => {
+      const targets = [conversationViewState.contentEl, conversationViewState.composerEl].filter(Boolean);
+      const relevant = records.some((record) => {
+        const node = record.target;
+        if (node.closest?.(`${conversationViewPaneBoundarySelector}, [data-codex-plus-ext]`)) return false;
+        // 正文内部流式输出由 ResizeObserver 处理；不因消息类名/子节点变化重扫长会话。
+        if (targets.some((target) => target.contains(node) && (target !== node || record.type === "childList"))) return false;
+        if (targets.some((target) => !target.isConnected)) return true;
+        if (record.type !== "childList") return targets.length < 2
+          || targets.some((target) => node === target || node.contains?.(target));
+        const anchors = `${conversationViewScrollContainerSelector}, ${conversationViewFooterSelector}, [data-codex-composer-root]`;
+        return targets.length < 2 || [...record.addedNodes, ...record.removedNodes].some((child) =>
+          child.matches?.(anchors) || child.querySelector?.(anchors)
+          || targets.some((target) => child === target || child.contains?.(target)));
+      });
+      if (!relevant) return;
+      conversationViewState.targetsDirty = true;
+      scheduleConversationViewAlign();
+    });
     if (document.body && !conversationViewState.moObserved) {
       conversationViewState.mo.observe(document.body, {
         childList: true,
@@ -889,13 +907,13 @@
   }
 
   function scanDeferred() {
+    restoreLegacyPluginBuildFlavorFilter();
     if (codexPluginMarketplacePatchEnabled()) {
       const pluginUnlockStrategy = codexPluginUnlockStrategy();
       const settings = codexPlusSettings();
       logCodexPluginUnlockStrategy(pluginUnlockStrategy);
       if ((pluginUnlockStrategy === "modern" || pluginUnlockStrategy === "unknown") && settings.pluginMarketplaceUnlock) {
         const marketplaceRequestPatchStrategy = codexPluginMarketplaceRequestPatchStrategy();
-        installPluginBuildFlavorFilterPatch();
         if (marketplaceRequestPatchStrategy === "bridge") {
           installPluginMarketplaceBridgePatch();
         } else if (marketplaceRequestPatchStrategy === "client") {

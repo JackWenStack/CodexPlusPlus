@@ -2357,6 +2357,9 @@
   }
 
   function cleanupDreamSkin() {
+    // 首次清理兼容旧注入的残留；之后仅在皮肤重新激活/外部运行时出现时再遍历 DOM。
+    if (window.__CODEX_PLUS_DREAM_SKIN_CLEANED__
+        && !window.__CODEX_DREAM_SKIN_STATE__ && !window.__CODEX_GLASS_VISION_SKIN_STATE__) return;
     window.__CODEX_DREAM_SKIN_DISABLED__ = true;
     const state = window.__CODEX_DREAM_SKIN_STATE__;
     if (typeof state?.cleanup === "function" && state.cleanup !== cleanupDreamSkin) {
@@ -2386,6 +2389,7 @@
     }
     delete window.__CODEX_GLASS_VISION_SKIN_STATE__;
     clearDreamSkinPresentation();
+    window.__CODEX_PLUS_DREAM_SKIN_CLEANED__ = true;
   }
 
   window.__CODEX_PLUS_CLEAR_DREAM_SKIN__ = cleanupDreamSkin;
@@ -2607,6 +2611,7 @@
 
   function refreshDreamSkin() {
     const settings = codexPlusSettings();
+    if (settings.dreamSkinEnabled && !settings.dreamSkinPaused) window.__CODEX_PLUS_DREAM_SKIN_CLEANED__ = false;
     if (settings.dreamSkinEnabled && !settings.dreamSkinPaused) ensureDreamSkinMainSurface();
     if (window.__CODEX_PLUS_EXTERNAL_DREAM_SKIN_RUNTIME__) {
       if (codexPlusBackendSettingsLoaded && (!settings.dreamSkinEnabled || settings.dreamSkinPaused)) {

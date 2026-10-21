@@ -15,43 +15,20 @@
       && (Array.isArray(filtered) ? !filtered.includes(marketplace) : !callback(marketplace)));
   }
 
-  function installPluginBuildFlavorFilterPatch() {
-    if (window.__codexPluginBuildFlavorFilterPatch === codexPluginMarketplaceUnlockVersion) return;
-    if (!codexPluginMarketplacePatchEnabled()) return;
-    const originalFilter = Array.prototype.__codexPluginBuildFlavorOriginalFilter || Array.prototype.filter;
-    if (!Array.prototype.__codexPluginBuildFlavorOriginalFilter) {
-      Object.defineProperty(Array.prototype, "__codexPluginBuildFlavorOriginalFilter", {
-        value: originalFilter,
-        configurable: true,
-        writable: true,
-      });
+  // 旧版注入曾修改整个页面的 Array.prototype；热更新和关闭功能时均恢复。
+  // 插件扩展仅通过 62-plugin-market-adapter 的请求/响应与独立目录完成。
+  function restoreLegacyPluginBuildFlavorFilter() {
+    const current = Array.prototype.filter;
+    const original = Array.prototype.__codexPluginBuildFlavorOriginalFilter;
+    if (current?.__codexPluginBuildFlavorPatched && typeof original === "function") {
+      Array.prototype.filter = original;
+      delete Array.prototype.__codexPluginBuildFlavorOriginalFilter;
+      sendCodexPlusDiagnostic("plugin_global_filter_restored", {});
     }
-    if (Array.prototype.filter.__codexPluginBuildFlavorPatched === codexPluginMarketplaceUnlockVersion) {
-      window.__codexPluginBuildFlavorFilterPatch = codexPluginMarketplaceUnlockVersion;
-      return;
-    }
-    const patchedFilter = function codexPluginBuildFlavorFilterPatch(callback, thisArg) {
-      const filtered = originalFilter.call(this, callback, thisArg);
-      if (filtered.length === this.length) return filtered;
-      if (isCodexPluginBuildFlavorFilter(callback, this, filtered)) {
-        sendCodexPlusDiagnostic("plugin_build_flavor_filter_bypassed", { pluginCount: this.length });
-        return Array.from(this);
-      }
-      if (isCodexPluginMarketplaceHiddenFilter(callback, this, filtered)) {
-        sendCodexPlusDiagnostic("plugin_marketplace_hidden_filter_bypassed", { marketplaceCount: this.length });
-        return Array.from(this);
-      }
-      if (isCodexPluginFeaturedFilter(callback, this, filtered)) {
-        sendCodexPlusDiagnostic("plugin_featured_filter_bypassed", { featuredCount: this.length });
-        return Array.from(this);
-      }
-      return filtered;
-    };
-    patchedFilter.__codexPluginBuildFlavorPatched = codexPluginMarketplaceUnlockVersion;
-    Array.prototype.filter = patchedFilter;
-    window.__codexPluginBuildFlavorFilterPatch = codexPluginMarketplaceUnlockVersion;
-    sendCodexPlusDiagnostic("plugin_build_flavor_filter_patch_installed", {});
+    delete window.__codexPluginBuildFlavorFilterPatch;
   }
+
+  restoreLegacyPluginBuildFlavorFilter();
 
   function restorePluginMarketplaceRequestParams(params, method = "") {
     if (!params || typeof params !== "object") return params;
