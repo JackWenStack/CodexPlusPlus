@@ -187,6 +187,7 @@
 
   function scanLightweight() {
     installStyle();
+    syncDesktopSessionListFilter();
     installCodexServiceTierDispatcherPatch();
     installCodexAppServerClientPrototypePatch();
     installCodexRemoteSessionRecoveryListener();

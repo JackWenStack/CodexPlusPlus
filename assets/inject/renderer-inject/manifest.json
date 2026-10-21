@@ -56,6 +56,11 @@
       "lines": 397
     },
     {
+      "name": "63-desktop-session-filter.js",
+      "description": "本地桌面会话列表来源过滤，保留 CLI 历史和远端会话",
+      "lines": 128
+    },
+    {
       "name": "70-model-catalog.js",
       "description": "全局状态、模型目录、模型白名单与解锁",
       "lines": 1150
@@ -113,7 +118,7 @@
     {
       "name": "95-conversation-view.js",
       "description": "会话视图运行时、官方用量策略重写、扫描主循环",
-      "lines": 938
+      "lines": 939
     },
     {
       "name": "96-whale-compat.js",
@@ -128,7 +133,7 @@
     {
       "name": "98-scan-schedule.js",
       "description": "扫描相关性判定与调度，启动重试",
-      "lines": 174
+      "lines": 175
     },
     {
       "name": "98-avatar-overlay-layout.js",

@@ -171,4 +171,5 @@
   scan();
   syncOfficialUsagePolicy();
   scheduleSidebarNavStartupRetry();
+  scheduleDesktopSessionFilterStartup();
   window.removeEventListener("resize", window.__codexPlusResizeHandler);
