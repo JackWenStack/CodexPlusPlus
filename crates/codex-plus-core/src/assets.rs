@@ -144,7 +144,7 @@ const STEPWISE_SCRIPT: &str = concat!(
     "\n})();\n",
 );
 pub const DIAGNOSTIC_BUILD_ID: &str = "diag-20260518-1";
-const DREAM_SKIN_RENDERER_REVISION: &str = "26-dream-skin-1.5.20";
+const DREAM_SKIN_RENDERER_REVISION: &str = "27-dream-skin-text-mutations";
 
 pub fn renderer_script() -> &'static str {
     RENDERER_SCRIPT
@@ -208,6 +208,17 @@ fn dream_skin_target_runtime_script(settings: &BackendSettings, include_art: boo
     }
 
     let (engine, renderer, base_css) = dream_skin_target_assets(settings);
+    // 保持 vendored 资源逐字节不变；仅在 Dream Skin 的结构观察器中跳过纯文本变更。
+    // 上游锚点变化时回落原逻辑（保留视觉行为），契约测试负责报告适配漂移。
+    let renderer = if engine == "dream-skin" {
+        renderer.replacen(
+            "if (record.type !== \"attributes\") return true;",
+            include_str!("../../../assets/inject/dream-skin-mutation-filter.js").trim(),
+            1,
+        )
+    } else {
+        renderer.to_owned()
+    };
     let managed_css = managed_dream_skin_css(settings);
     // 原生 shell 兼容属于基础主题：内置图片和没有 Safe CSS 的图片也必须可达。
     let native_shell_css = include_str!("../../../assets/inject/dream-skin-native-shell-compat.css");

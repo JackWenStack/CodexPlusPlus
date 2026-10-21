@@ -6,6 +6,21 @@ use codex_plus_core::dream_skin_runtime::{
 use std::path::Path;
 
 #[test]
+fn text_mutation_filter_is_scoped_to_the_dream_skin_payload() {
+    let mut settings = codex_plus_core::settings::BackendSettings {
+        codex_app_dream_skin_enabled: true,
+        codex_app_dream_skin_paused: false,
+        ..Default::default()
+    };
+    let script = codex_plus_core::assets::dream_skin_live_update_script(&settings, false);
+    assert!(script.contains("const changedNodes = [...record.addedNodes, ...record.removedNodes]"));
+    assert!(script.contains("27-dream-skin-text-mutations"));
+    settings.codex_app_dream_skin_theme_config.style_preset = "glass-vision".to_string();
+    let other = codex_plus_core::assets::dream_skin_live_update_script(&settings, false);
+    assert!(!other.contains("const changedNodes = [...record.addedNodes, ...record.removedNodes]"));
+}
+
+#[test]
 fn maps_rust_apple_silicon_arch_to_lipo_name() {
     assert_eq!(macos_arch_name("aarch64"), "arm64");
     assert_eq!(macos_arch_name("x86_64"), "x86_64");
