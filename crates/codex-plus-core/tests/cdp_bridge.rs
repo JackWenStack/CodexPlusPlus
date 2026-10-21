@@ -1005,14 +1005,12 @@ fn injection_script_marks_diagnostic_build_and_reports_script_loaded() {
 }
 
 #[test]
-fn injection_script_fetches_ads_without_bridge() {
+fn injection_script_does_not_fetch_or_display_ads() {
     let script = assets::injection_script(57321);
-
-    assert!(script.contains("directFetchCodexPlusAds"));
-    assert!(script.contains("cacheBustCodexPlusAdUrl"));
-    assert!(script.contains("Date.now()"));
-    assert!(script.contains("BigPizzaV3/Ad-List"));
-    assert!(!script.contains("codexPlusAds = normalizeCodexPlusAds(await postJson(\"/ads\", {}));"));
+    assert!(!script.contains("directFetchCodexPlusAds"));
+    assert!(!script.contains("fetchCodexPlusAds"));
+    assert!(!script.contains("BigPizzaV3/Ad-List"));
+    assert!(!script.contains("id: codexPlusRailSponsorId, label:"));
 }
 
 #[test]

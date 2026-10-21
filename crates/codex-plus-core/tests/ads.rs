@@ -7,6 +7,12 @@ use codex_plus_core::ads::{
 };
 use serde_json::json;
 
+#[tokio::test]
+async fn custom_build_returns_no_advertising_content() {
+    let payload = codex_plus_core::ads::fetch_ad_list().await.unwrap();
+    assert_eq!(payload, json!({ "version": 1, "ads": [] }));
+}
+
 #[test]
 fn default_ad_urls_match_legacy_helper_sources() {
     assert_eq!(

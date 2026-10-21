@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { it } from "node:test";
 
-it("广告请求持续未完成时，侧栏工具列表仍能加载", async () => {
+it("定制版启动不请求广告，侧栏和供应商仍能加载", async () => {
   const source = await readFile(new URL("./App.tsx", import.meta.url), "utf8");
   const effect = source.slice(source.indexOf("    void refreshTools(true);"));
   const startup = effect.slice(0, effect.indexOf("  }, []);"));
@@ -20,7 +20,7 @@ it("广告请求持续未完成时，侧栏工具列表仍能加载", async () =
     refreshOverview: noOp,
     refreshAds: async () => { events.push("ads"); await pendingAds; },
     refreshSettings: noOp,
-    refreshRelay: noOp,
+    refreshRelay: async () => { events.push("relay"); },
     refreshEnvConflicts: noOp,
     refreshProviderSyncTargets: noOp,
     refreshPendingProviderImport: noOp,
@@ -32,7 +32,8 @@ it("广告请求持续未完成时，侧栏工具列表仍能加载", async () =
   );
   try {
     await new Promise((resolve) => setImmediate(resolve));
-    assert.ok(events.includes("ads"), "测试必须真的到达未完成的广告请求");
+    assert.ok(!events.includes("ads"), "启动不应发出广告请求");
+    assert.ok(events.includes("relay"), "移除广告后供应商初始化仍会完成");
     assert.ok(events.includes("tools"), "广告尚未返回，工具列表也应已加载");
   } finally {
     releaseAds();
