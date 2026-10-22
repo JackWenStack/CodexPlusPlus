@@ -120,12 +120,70 @@ fn library_always_lists_builtin_theme_first() {
     assert_eq!(
         library.themes[0].name,
         if cfg!(windows) {
-            "默认无背景"
+            "休闲室内居家"
         } else {
             "Dream Skin"
         }
     );
     assert!(library.themes[0].builtin);
+}
+
+#[cfg(windows)]
+#[test]
+fn identical_installed_indoor_theme_is_presented_as_builtin_without_deleting_files() {
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path().join("dream-skin/themes/cecilylove002");
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut config = DreamSkinThemeConfig::default();
+    config.id = "cecilylove002".into();
+    config.project_prefix.push(' ');
+    std::fs::write(dir.join("theme.json"), serde_json::to_vec(&config).unwrap()).unwrap();
+    std::fs::write(dir.join("image.jpg"), codex_plus_core::assets::dream_skin_default_image().1).unwrap();
+    std::fs::write(dir.join("theme.css"), codex_plus_core::assets::dream_skin_default_css()).unwrap();
+    let draft = load_stored_dream_skin_theme(temp.path(), "cecilylove002").unwrap();
+    let active = prepare_dream_skin_activation(temp.path(), &draft).unwrap();
+    let settings = BackendSettings { codex_app_dream_skin_theme_config: active.config, codex_app_dream_skin_image_path: active.active_image_path, ..Default::default() };
+    let library = list_dream_skin_themes(temp.path(), &settings).unwrap();
+    assert_eq!(library.themes.len(), 1);
+    assert!(library.themes[0].builtin && library.themes[0].active);
+    assert!(library.active_draft.builtin && library.active_draft.image_path.is_empty());
+    assert_eq!(library.active_draft.config.id, "builtin-indoor-home");
+    assert!(dir.join("image.jpg").is_file());
+
+    // 同 ID 的个人修改不能被内置卡片吞掉。
+    let mut edited = config.clone();
+    edited.name = "我的修改版".into();
+    std::fs::write(dir.join("theme.json"), serde_json::to_vec(&edited).unwrap()).unwrap();
+    let library = list_dream_skin_themes(temp.path(), &settings).unwrap();
+    assert_eq!(library.themes.len(), 2);
+    assert!(library.themes[0].active);
+    assert!(!library.themes[1].active);
+    assert_eq!(library.themes[1].name, "我的修改版");
+
+    std::fs::write(dir.join("theme.json"), serde_json::to_vec(&config).unwrap()).unwrap();
+    std::fs::write(dir.join("theme.css"), "[data-ds-part=\"root\"] { background-color: #ff0000; }").unwrap();
+    let edited = load_stored_dream_skin_theme(temp.path(), "cecilylove002").unwrap();
+    let active = prepare_dream_skin_activation(temp.path(), &edited).unwrap();
+    let modified = BackendSettings { codex_app_dream_skin_theme_config: active.config, codex_app_dream_skin_image_path: active.active_image_path, ..Default::default() };
+    let library = list_dream_skin_themes(temp.path(), &modified).unwrap();
+    assert_eq!(library.themes.len(), 2);
+    assert!(!library.themes[0].active);
+    assert!(library.themes[1].active);
+}
+
+#[cfg(windows)]
+#[test]
+fn copying_builtin_theme_preserves_its_image_format_and_css() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut config = DreamSkinThemeConfig::default();
+    config.id = "personal-copy".into();
+    let draft = DreamSkinThemeDraft { config, image_path: String::new(), builtin: false };
+    save_dream_skin_theme(temp.path(), &draft).unwrap();
+    let stored = load_stored_dream_skin_theme(temp.path(), "personal-copy").unwrap();
+    assert!(stored.image_path.ends_with("image.jpg"));
+    let active = prepare_dream_skin_activation(temp.path(), &stored).unwrap();
+    assert_eq!(std::fs::read(active.active_image_path).unwrap(), codex_plus_core::assets::dream_skin_default_image().1);
+    assert_eq!(std::fs::read_to_string(temp.path().join("dream-skin/theme/current.css")).unwrap(), codex_plus_core::assets::dream_skin_default_css());
 }
 
 #[test]

@@ -5,6 +5,17 @@ use codex_plus_core::dream_skin_runtime::{
 };
 use std::path::Path;
 
+#[cfg(windows)]
+#[test]
+fn builtin_indoor_theme_includes_its_safe_css_without_managed_files() {
+    let settings = codex_plus_core::settings::BackendSettings { codex_app_dream_skin_enabled: true, ..Default::default() };
+    let script = codex_plus_core::assets::dream_skin_live_update_script(&settings, true);
+    let compiled = codex_plus_core::dream_skin_package::compile_safe_css(codex_plus_core::assets::dream_skin_default_css()).unwrap();
+    let escaped = serde_json::to_string(&compiled).unwrap();
+    assert!(script.contains(&escaped[1..escaped.len()-1]));
+    assert!(script.contains("data:image/jpeg;base64,"));
+}
+
 #[test]
 fn text_mutation_filter_is_scoped_to_the_dream_skin_payload() {
     let mut settings = codex_plus_core::settings::BackendSettings {

@@ -210,6 +210,10 @@ pub fn list_dream_skin_themes(
     let default_theme = DreamSkinThemeConfig::default();
     let active_config = settings.codex_app_dream_skin_theme_config.clone();
     let active_image_path = settings.codex_app_dream_skin_image_path.trim().to_string();
+    let builtin_active = cfg!(windows) && matches_builtin_theme_assets(
+        &active_config, &active_image_path,
+        Path::new(&active_image_path).with_file_name("current.css").as_path(),
+    );
     let mut themes = vec![DreamSkinThemeSummary {
         key: "builtin".to_string(),
         id: default_theme.id.clone(),
@@ -217,7 +221,7 @@ pub fn list_dream_skin_themes(
         preview_path: String::new(),
         kind: DreamSkinThemeKind::Builtin,
         builtin: true,
-        active: active_config == default_theme && active_image_path.is_empty(),
+        active: builtin_active || (active_config == default_theme && active_image_path.is_empty()),
         modified: false,
     }];
 
@@ -227,9 +231,17 @@ pub fn list_dream_skin_themes(
             .with_context(|| format!("failed to read {}", themes_dir.display()))?
         {
             let entry = entry?;
-            if let Some(summary) =
+            if let Some(mut summary) =
                 read_theme_summary(&entry.path(), &active_config, &active_image_path)
             {
+                // 相同的已安装原版并入内置卡片；目录仍保留，修改版继续单独显示。
+                if cfg!(windows) && (summary.id == default_theme.id || summary.id == "cecilylove002")
+                    && let Ok(stored) = load_stored_dream_skin_theme(state_dir, &summary.id)
+                    && matches_builtin_theme_assets(&stored.config, &stored.image_path, &entry.path().join("theme.css"))
+                {
+                    continue;
+                }
+                if builtin_active { summary.active = false; summary.modified = false; }
                 themes.push(summary);
             }
         }
@@ -258,11 +270,33 @@ pub fn list_dream_skin_themes(
     Ok(DreamSkinThemeLibrary {
         themes,
         active_draft: DreamSkinThemeDraft {
-            config: active_config,
-            image_path: active_image_path,
-            builtin: false,
+            config: if builtin_active { default_theme } else { active_config },
+            image_path: if builtin_active { String::new() } else { active_image_path },
+            builtin: builtin_active,
         },
     })
+}
+
+fn matches_builtin_theme_assets(config: &DreamSkinThemeConfig, image_path: &str, css_path: &Path) -> bool {
+    let default = DreamSkinThemeConfig::default();
+    let mut comparable = config.clone();
+    #[cfg(windows)]
+    if comparable.id == "cecilylove002" { comparable.id = default.id.clone(); }
+    // 前端编辑器会 trim 项目前缀；兼容原包末尾的空格，不把它当成个人样式修改。
+    comparable.project_prefix = comparable.project_prefix.trim().to_string();
+    let mut default = default;
+    default.project_prefix = default.project_prefix.trim().to_string();
+    if comparable != default { return false; }
+    if image_path.is_empty() { return true; }
+    let bytes = crate::assets::dream_skin_default_image().1;
+    if !std::fs::metadata(image_path).is_ok_and(|m| m.is_file() && m.len() == bytes.len() as u64)
+        || !std::fs::read(image_path).is_ok_and(|image| image == bytes)
+    {
+        return false;
+    }
+    if std::fs::metadata(css_path).is_ok_and(|m| m.len() > THEME_CONFIG_LIMIT) { return false; }
+    let css = std::fs::read_to_string(css_path).unwrap_or_default().replace("\r\n", "\n");
+    css.trim() == crate::assets::dream_skin_default_css().replace("\r\n", "\n").trim()
 }
 
 fn read_theme_summary(
@@ -420,8 +454,11 @@ pub fn save_dream_skin_theme(
 
     let staged = (|| -> anyhow::Result<()> {
         if draft.image_path.trim().is_empty() {
-            let (_, bytes) = crate::assets::dream_skin_default_image();
-            crate::settings::atomic_write(&staging.join("image.png"), bytes)?;
+            let (mime, bytes) = crate::assets::dream_skin_default_image();
+            let image = if mime == "image/jpeg" { "image.jpg" } else { "image.png" };
+            crate::settings::atomic_write(&staging.join(image), bytes)?;
+            let css = crate::assets::dream_skin_default_css();
+            if !css.is_empty() { crate::settings::atomic_write(&staging.join("theme.css"), css.as_bytes())?; }
         } else {
             crate::dream_skin::prepare_dream_skin_image_for_directory(
                 Path::new(draft.image_path.trim()),

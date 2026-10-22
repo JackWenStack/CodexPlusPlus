@@ -12,13 +12,13 @@ fn backend_settings_defaults_to_upstream_platform_theme_config() {
     assert!(theme.style_preset.is_empty());
     assert_eq!(theme.brand_subtitle, "CODEX DREAM SKIN");
     if cfg!(windows) {
-        assert_eq!(theme.id, "builtin-no-background");
-        assert_eq!(theme.name, "默认无背景");
-        assert_eq!(theme.tagline, "自定义你的工作台。");
-        assert_eq!(theme.extra_fields["image"], "dream-skin-empty.png");
-        assert!(theme.colors.is_none());
-        assert_eq!(theme.extra_fields["appearance"], "auto");
-        assert_eq!(theme.extra_fields["art"]["safeArea"], "left");
+        assert_eq!(theme.id, "builtin-indoor-home");
+        assert_eq!(theme.name, "休闲室内居家");
+        assert_eq!(theme.tagline, "把柔光与玫瑰带进今天的工作台。");
+        assert_eq!(theme.extra_fields["image"], "background.jpg");
+        assert_eq!(theme.colors.as_ref().unwrap().accent, "#4b75a6");
+        assert_eq!(theme.extra_fields["appearance"], "dark");
+        assert_eq!(theme.extra_fields["art"]["safeArea"], "none");
     } else {
         assert_eq!(theme.id, "custom-1784123441349");
         assert_eq!(theme.name, "Dream Skin");
@@ -534,6 +534,7 @@ fn snow_base_theme_matches_the_target_project_and_switching_back_restores_appear
     let snow = DreamSkinThemeConfig {
         id: "codex-snow-skin".to_string(),
         style_preset: "codex-snow".to_string(),
+        extra_fields: Default::default(),
         ..Default::default()
     };
 
@@ -569,6 +570,7 @@ fn glass_vision_base_theme_matches_the_target_project() {
     let glass = DreamSkinThemeConfig {
         id: "glass-vision".to_string(),
         style_preset: "glass-vision".to_string(),
+        extra_fields: Default::default(),
         ..Default::default()
     };
 

@@ -11,14 +11,16 @@ import {
 } from "./dream-skin.ts";
 
 describe("dream skin theme helpers", () => {
-  it("uses a background-free Windows default while preserving user theme metadata", () => {
+  it("uses the indoor-home Windows default while preserving user theme metadata", () => {
     const previous = Object.getOwnPropertyDescriptor(globalThis, "navigator");
     Object.defineProperty(globalThis, "navigator", { value: { userAgent: "Windows NT 10.0" }, configurable: true });
     try {
       const theme = defaultDreamSkinTheme();
-      assert.equal(theme.id, "builtin-no-background");
-      assert.equal(theme.name, "默认无背景");
-      assert.equal(theme.image, "dream-skin-empty.png");
+      assert.equal(theme.id, "builtin-indoor-home");
+      assert.equal(theme.name, "休闲室内居家");
+      assert.equal(theme.image, "background.jpg");
+      assert.equal(theme.colors?.accent, "#4b75a6");
+      assert.equal(theme.appearance, "dark");
       const custom = normalizeDreamSkinTheme({ ...theme, id: "my-theme", name: "我的主题", image: "background.jpg" });
       assert.equal(custom.id, "my-theme");
       assert.equal(custom.name, "我的主题");

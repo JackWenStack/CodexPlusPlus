@@ -111,7 +111,7 @@ const DREAM_SKIN_COMMUNITY_COMPAT_CSS: &str =
     include_str!("../../../assets/inject/dream-skin-community-compat.css");
 #[cfg(windows)]
 const DREAM_SKIN_DEFAULT_IMAGE: &[u8] =
-    include_bytes!("../../../assets/inject/dream-skin-empty.png");
+    include_bytes!("../../../assets/inject/custom/indoor-home/background.jpg");
 #[cfg(not(windows))]
 const DREAM_SKIN_DEFAULT_IMAGE: &[u8] =
     include_bytes!("../../../assets/inject/upstream/dream-skin/macos/portal-hero.png");
@@ -151,7 +151,17 @@ pub fn renderer_script() -> &'static str {
 }
 
 pub fn dream_skin_default_image() -> (&'static str, &'static [u8]) {
+    #[cfg(windows)]
+    return ("image/jpeg", DREAM_SKIN_DEFAULT_IMAGE);
+    #[cfg(not(windows))]
     ("image/png", DREAM_SKIN_DEFAULT_IMAGE)
+}
+
+pub fn dream_skin_default_css() -> &'static str {
+    #[cfg(windows)]
+    return include_str!("../../../assets/inject/custom/indoor-home/theme.css");
+    #[cfg(not(windows))]
+    ""
 }
 
 pub fn dream_skin_art_data_uri(settings: &BackendSettings) -> String {
@@ -297,6 +307,12 @@ fn dream_skin_target_runtime_script(settings: &BackendSettings, include_art: boo
 
 fn managed_dream_skin_css(settings: &BackendSettings) -> String {
     let image_path = settings.codex_app_dream_skin_image_path.trim();
+    if image_path.is_empty() && settings.codex_app_dream_skin_theme_config.id == crate::settings::DreamSkinThemeConfig::default().id {
+        return crate::dream_skin_package::compile_safe_css(dream_skin_default_css())
+            .ok().filter(|css| !css.is_empty())
+            .map(|compiled| format!("{compiled}\n{DREAM_SKIN_COMMUNITY_COMPAT_CSS}"))
+            .unwrap_or_default();
+    }
     if image_path.is_empty()
         || !crate::dream_skin::is_managed_dream_skin_image(
             Path::new(image_path),
@@ -734,6 +750,7 @@ mod tests {
             let mut settings = BackendSettings::default();
             settings.codex_app_dream_skin_enabled = true;
             settings.codex_app_dream_skin_image_path = image;
+            settings.codex_app_dream_skin_theme_config.id = "custom-without-safe-css".to_string();
             assert!(managed_dream_skin_css(&settings).is_empty());
             let script = dream_skin_target_runtime_script(&settings, false);
             assert!(script.contains("全尺寸 shell"));

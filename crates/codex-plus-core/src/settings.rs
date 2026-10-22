@@ -543,26 +543,14 @@ pub struct DreamSkinThemeConfig {
 
 impl Default for DreamSkinThemeConfig {
     fn default() -> Self {
-        let mut extra_fields = Map::new();
         #[cfg(windows)]
         {
-            extra_fields.insert(
-                "image".to_string(),
-                Value::String("dream-skin-empty.png".to_string()),
-            );
-            extra_fields.insert("appearance".to_string(), Value::String("auto".to_string()));
-            extra_fields.insert(
-                "art".to_string(),
-                serde_json::json!({
-                    "focusX": 0.72,
-                    "focusY": 0.45,
-                    "safeArea": "left",
-                    "taskMode": "ambient"
-                }),
-            );
+            serde_json::from_str(include_str!("../../../assets/inject/custom/indoor-home/theme.json"))
+                .expect("bundled indoor-home theme must be valid")
         }
         #[cfg(not(windows))]
         {
+            let mut extra_fields = Map::new();
             extra_fields.insert(
                 "image".to_string(),
                 Value::String("portal-hero.png".to_string()),
@@ -579,24 +567,20 @@ impl Default for DreamSkinThemeConfig {
                 "promoUrl".to_string(),
                 Value::String("https://passion8.cc/register?aff=TuPe".to_string()),
             );
-        }
-        Self {
-            schema_version: default_dream_skin_schema_version(),
-            id: default_dream_skin_id(),
-            name: default_dream_skin_name(),
-            style_preset: String::new(),
-            brand_subtitle: default_dream_skin_brand_subtitle(),
-            tagline: default_dream_skin_tagline(),
-            project_prefix: default_dream_skin_project_prefix(),
-            project_label: default_dream_skin_project_label(),
-            status_text: default_dream_skin_status_text(),
-            quote: default_dream_skin_quote(),
-            colors: if cfg!(windows) {
-                None
-            } else {
-                Some(DreamSkinColors::default())
-            },
-            extra_fields,
+            Self {
+                schema_version: default_dream_skin_schema_version(),
+                id: default_dream_skin_id(),
+                name: default_dream_skin_name(),
+                style_preset: String::new(),
+                brand_subtitle: default_dream_skin_brand_subtitle(),
+                tagline: default_dream_skin_tagline(),
+                project_prefix: default_dream_skin_project_prefix(),
+                project_label: default_dream_skin_project_label(),
+                status_text: default_dream_skin_status_text(),
+                quote: default_dream_skin_quote(),
+                colors: Some(DreamSkinColors::default()),
+                extra_fields,
+            }
         }
     }
 }
@@ -1286,7 +1270,7 @@ fn default_dream_skin_schema_version() -> u8 {
 
 #[cfg(windows)]
 fn default_dream_skin_id() -> String {
-    "builtin-no-background".to_string()
+    "builtin-indoor-home".to_string()
 }
 
 #[cfg(not(windows))]
@@ -1296,7 +1280,7 @@ fn default_dream_skin_id() -> String {
 
 #[cfg(windows)]
 fn default_dream_skin_name() -> String {
-    "默认无背景".to_string()
+    "休闲室内居家".to_string()
 }
 
 #[cfg(not(windows))]
@@ -1335,7 +1319,7 @@ fn default_dream_skin_brand_subtitle() -> String {
 
 #[cfg(windows)]
 fn default_dream_skin_tagline() -> String {
-    "自定义你的工作台。".to_string()
+    "把柔光与玫瑰带进今天的工作台。".to_string()
 }
 
 #[cfg(not(windows))]
@@ -2686,9 +2670,17 @@ fn normalize_settings_config_sections(mut settings: BackendSettings) -> BackendS
         && let Ok(retired) = serde_json::from_str::<DreamSkinThemeConfig>(include_str!(
             "../../../assets/inject/upstream/dream-skin/windows/theme.json"
         ))
-        && settings.codex_app_dream_skin_theme_config == retired
     {
-        settings.codex_app_dream_skin_theme_config = DreamSkinThemeConfig::default();
+        let mut empty = retired.clone();
+        empty.id = "builtin-no-background".to_string();
+        empty.name = "默认无背景".to_string();
+        empty.tagline = "自定义你的工作台。".to_string();
+        empty.extra_fields.insert("image".to_string(), Value::String("dream-skin-empty.png".to_string()));
+        if settings.codex_app_dream_skin_theme_config == retired
+            || settings.codex_app_dream_skin_theme_config == empty
+        {
+            settings.codex_app_dream_skin_theme_config = DreamSkinThemeConfig::default();
+        }
     }
     if settings.codex_app_dream_skin_theme_config == DreamSkinThemeConfig::default()
         && settings.codex_app_dream_skin_theme != default_dream_skin_theme()

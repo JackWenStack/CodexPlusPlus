@@ -1,3 +1,5 @@
+import indoorHomeTheme from "../../../assets/inject/custom/indoor-home/theme.json" with { type: "json" };
+
 export type DreamSkinColors = {
   background: string;
   panel: string;
@@ -209,25 +211,7 @@ export function defaultDreamSkinColors(): DreamSkinColors {
 
 export function defaultDreamSkinTheme(): DreamSkinThemeConfig {
   if (typeof navigator !== "undefined" && /\bWindows\b/i.test(navigator.userAgent)) {
-    return {
-      schemaVersion: 1,
-      id: "builtin-no-background",
-      name: "默认无背景",
-      brandSubtitle: "CODEX DREAM SKIN",
-      tagline: "自定义你的工作台。",
-      projectPrefix: "选择项目 · ",
-      projectLabel: "◉  选择项目",
-      statusText: "DREAM SKIN ONLINE",
-      quote: "MAKE SOMETHING WONDERFUL",
-      image: "dream-skin-empty.png",
-      appearance: "auto",
-      art: {
-        focusX: 0.72,
-        focusY: 0.45,
-        safeArea: "left",
-        taskMode: "ambient",
-      },
-    };
+    return structuredClone(indoorHomeTheme) as DreamSkinThemeConfig;
   }
   return {
     schemaVersion: 1,
