@@ -111,7 +111,7 @@ const DREAM_SKIN_COMMUNITY_COMPAT_CSS: &str =
     include_str!("../../../assets/inject/dream-skin-community-compat.css");
 #[cfg(windows)]
 const DREAM_SKIN_DEFAULT_IMAGE: &[u8] =
-    include_bytes!("../../../assets/inject/upstream/dream-skin/windows/dream-reference.jpg");
+    include_bytes!("../../../assets/inject/dream-skin-empty.png");
 #[cfg(not(windows))]
 const DREAM_SKIN_DEFAULT_IMAGE: &[u8] =
     include_bytes!("../../../assets/inject/upstream/dream-skin/macos/portal-hero.png");
@@ -151,10 +151,7 @@ pub fn renderer_script() -> &'static str {
 }
 
 pub fn dream_skin_default_image() -> (&'static str, &'static [u8]) {
-    #[cfg(windows)]
-    return ("image/jpeg", DREAM_SKIN_DEFAULT_IMAGE);
-    #[cfg(not(windows))]
-    return ("image/png", DREAM_SKIN_DEFAULT_IMAGE);
+    ("image/png", DREAM_SKIN_DEFAULT_IMAGE)
 }
 
 pub fn dream_skin_art_data_uri(settings: &BackendSettings) -> String {

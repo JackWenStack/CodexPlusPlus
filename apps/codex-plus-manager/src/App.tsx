@@ -234,7 +234,7 @@ const supportsPetRealMouseLook = isWindowsPlatform || isMacPlatform;
 /// 多开启动后轮询「就绪/失败」结论的节奏：worker 最长等 90 秒就绪，这里给到 2 分钟。
 const MULTI_LAUNCH_POLL_INTERVAL_MS = 3000;
 const MULTI_LAUNCH_POLL_TIMEOUT_MS = 120_000;
-const dreamSkinWindowsPreviewUrl = new URL("../../../assets/inject/upstream/dream-skin/windows/dream-reference.jpg", import.meta.url).href;
+const dreamSkinWindowsPreviewUrl = new URL("../../../assets/inject/dream-skin-empty.png", import.meta.url).href;
 const dreamSkinMacPreviewUrl = new URL("../../../assets/inject/upstream/dream-skin/macos/portal-hero.png", import.meta.url).href;
 const dreamSkinCompanionDataUrlLimit = 240_000;
 const dreamSkinCompanionMimeTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);

@@ -869,11 +869,7 @@ fn injection_script_installs_dream_skin_from_backend_settings() {
     assert!(script.contains("window.__CODEX_PLUS_DREAM_SKIN_PLATFORM__"));
     assert!(script.contains("window.__CODEX_PLUS_DREAM_SKIN_REVISION__"));
     assert!(script.contains("window.__CODEX_PLUS_DREAM_SKIN_ART__"));
-    assert!(script.contains(if cfg!(windows) {
-        "data:image/jpeg;base64,"
-    } else {
-        "data:image/png;base64,"
-    }));
+    assert!(script.contains("data:image/png;base64,"));
     assert!(script.contains("codex-dream-skin-style"));
     assert!(script.contains("codex-dream-skin-chrome"));
     assert!(script.contains("URL.createObjectURL(new Blob"));
@@ -938,11 +934,7 @@ fn dream_skin_live_update_script_excludes_the_full_renderer_runtime() {
     assert!(probe.contains("__CODEX_GLASS_VISION_SKIN_STATE__"));
     assert!(update.contains("Lightweight Theme"));
     assert!(update.contains("__CODEX_PLUS_DREAM_SKIN_ART_SIGNATURE__"));
-    assert!(update.contains(if cfg!(windows) {
-        "data:image/jpeg;base64,"
-    } else {
-        "data:image/png;base64,"
-    }));
+    assert!(update.contains("data:image/png;base64,"));
     assert!(!metadata_only_update.contains("base64,"));
     assert!(!update.contains("__CODEX_PLUS_SPONSOR_IMAGES__"));
     assert!(!update.contains("__codexSessionDeleteObserver"));
@@ -980,13 +972,14 @@ fn dream_skin_style_presets_select_their_original_target_engines() {
 }
 
 #[test]
-fn dream_skin_bundles_a_real_default_image() {
+fn dream_skin_bundles_the_platform_default_image() {
     let (content_type, image) = assets::dream_skin_default_image();
 
     if cfg!(windows) {
-        assert_eq!(content_type, "image/jpeg");
-        assert!(image.len() > 600_000);
-        assert_eq!(&image[..3], b"\xFF\xD8\xFF");
+        assert_eq!(content_type, "image/png");
+        assert!(image.len() < 100);
+        assert_eq!(&image[..8], b"\x89PNG\r\n\x1a\n");
+        assert_eq!(&image[16..24], &[0, 0, 0, 1, 0, 0, 0, 1]);
     } else {
         assert_eq!(content_type, "image/png");
         assert!(image.len() > 1_000_000);

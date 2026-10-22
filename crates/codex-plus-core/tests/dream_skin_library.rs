@@ -120,7 +120,7 @@ fn library_always_lists_builtin_theme_first() {
     assert_eq!(
         library.themes[0].name,
         if cfg!(windows) {
-            "桥本有菜"
+            "默认无背景"
         } else {
             "Dream Skin"
         }

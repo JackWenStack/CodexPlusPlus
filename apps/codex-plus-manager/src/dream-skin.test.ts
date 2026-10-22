@@ -11,6 +11,24 @@ import {
 } from "./dream-skin.ts";
 
 describe("dream skin theme helpers", () => {
+  it("uses a background-free Windows default while preserving user theme metadata", () => {
+    const previous = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+    Object.defineProperty(globalThis, "navigator", { value: { userAgent: "Windows NT 10.0" }, configurable: true });
+    try {
+      const theme = defaultDreamSkinTheme();
+      assert.equal(theme.id, "builtin-no-background");
+      assert.equal(theme.name, "默认无背景");
+      assert.equal(theme.image, "dream-skin-empty.png");
+      const custom = normalizeDreamSkinTheme({ ...theme, id: "my-theme", name: "我的主题", image: "background.jpg" });
+      assert.equal(custom.id, "my-theme");
+      assert.equal(custom.name, "我的主题");
+      assert.equal(custom.image, "background.jpg");
+    } finally {
+      if (previous) Object.defineProperty(globalThis, "navigator", previous);
+      else Reflect.deleteProperty(globalThis, "navigator");
+    }
+  });
+
   it("uses the Codex-Dream-Skin theme.json defaults", () => {
     const theme = defaultDreamSkinTheme();
 

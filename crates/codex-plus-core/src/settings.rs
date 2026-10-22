@@ -548,7 +548,7 @@ impl Default for DreamSkinThemeConfig {
         {
             extra_fields.insert(
                 "image".to_string(),
-                Value::String("dream-reference.jpg".to_string()),
+                Value::String("dream-skin-empty.png".to_string()),
             );
             extra_fields.insert("appearance".to_string(), Value::String("auto".to_string()));
             extra_fields.insert(
@@ -1286,7 +1286,7 @@ fn default_dream_skin_schema_version() -> u8 {
 
 #[cfg(windows)]
 fn default_dream_skin_id() -> String {
-    "preset-arina-hashimoto".to_string()
+    "builtin-no-background".to_string()
 }
 
 #[cfg(not(windows))]
@@ -1296,7 +1296,7 @@ fn default_dream_skin_id() -> String {
 
 #[cfg(windows)]
 fn default_dream_skin_name() -> String {
-    "桥本有菜".to_string()
+    "默认无背景".to_string()
 }
 
 #[cfg(not(windows))]
@@ -1335,7 +1335,7 @@ fn default_dream_skin_brand_subtitle() -> String {
 
 #[cfg(windows)]
 fn default_dream_skin_tagline() -> String {
-    "把柔光与玫瑰带进今天的工作台。".to_string()
+    "自定义你的工作台。".to_string()
 }
 
 #[cfg(not(windows))]
@@ -2680,6 +2680,16 @@ fn normalize_settings_config_sections(mut settings: BackendSettings) -> BackendS
         normalize_image_overlay_fit_mode(&settings.codex_app_image_overlay_fit_mode);
     settings.codex_app_dream_skin_theme =
         normalize_dream_skin_theme(&settings.codex_app_dream_skin_theme);
+    // 仅迁移完全未改动、没有用户图片的旧内置配置；个人皮肤不按名称清理。
+    #[cfg(windows)]
+    if settings.codex_app_dream_skin_image_path.trim().is_empty()
+        && let Ok(retired) = serde_json::from_str::<DreamSkinThemeConfig>(include_str!(
+            "../../../assets/inject/upstream/dream-skin/windows/theme.json"
+        ))
+        && settings.codex_app_dream_skin_theme_config == retired
+    {
+        settings.codex_app_dream_skin_theme_config = DreamSkinThemeConfig::default();
+    }
     if settings.codex_app_dream_skin_theme_config == DreamSkinThemeConfig::default()
         && settings.codex_app_dream_skin_theme != default_dream_skin_theme()
     {

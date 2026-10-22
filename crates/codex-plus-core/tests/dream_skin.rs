@@ -12,9 +12,10 @@ fn backend_settings_defaults_to_upstream_platform_theme_config() {
     assert!(theme.style_preset.is_empty());
     assert_eq!(theme.brand_subtitle, "CODEX DREAM SKIN");
     if cfg!(windows) {
-        assert_eq!(theme.id, "preset-arina-hashimoto");
-        assert_eq!(theme.name, "桥本有菜");
-        assert_eq!(theme.tagline, "把柔光与玫瑰带进今天的工作台。");
+        assert_eq!(theme.id, "builtin-no-background");
+        assert_eq!(theme.name, "默认无背景");
+        assert_eq!(theme.tagline, "自定义你的工作台。");
+        assert_eq!(theme.extra_fields["image"], "dream-skin-empty.png");
         assert!(theme.colors.is_none());
         assert_eq!(theme.extra_fields["appearance"], "auto");
         assert_eq!(theme.extra_fields["art"]["safeArea"], "left");
@@ -72,6 +73,33 @@ fn target_theme_fields_survive_deserialize_and_serialize() {
     }
     assert!(saved.get("colors").is_none());
     assert!(saved.get("stylePreset").is_none());
+}
+
+#[cfg(windows)]
+#[test]
+fn retired_builtin_migrates_but_customized_themes_and_images_are_preserved() {
+    let retired: DreamSkinThemeConfig = serde_json::from_str(include_str!(
+        "../../../assets/inject/upstream/dream-skin/windows/theme.json"
+    )).unwrap();
+    for (edited, image_path) in [(false, ""), (true, ""), (false, "personal-background.png")] {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("settings.json");
+        let mut config = retired.clone();
+        if edited { config.tagline = "Keep my customization".to_string(); }
+        std::fs::write(&path, serde_json::to_vec(&serde_json::json!({
+            "codexAppDreamSkinThemeConfig": config,
+            "codexAppDreamSkinImagePath": image_path,
+            "relayTestModel": "keep-me"
+        })).unwrap()).unwrap();
+        let settings = SettingsStore::new(path).load().unwrap();
+        if !edited && image_path.is_empty() {
+            assert_eq!(settings.codex_app_dream_skin_theme_config, DreamSkinThemeConfig::default());
+        } else {
+            assert_eq!(settings.codex_app_dream_skin_theme_config, config);
+            assert_eq!(settings.codex_app_dream_skin_image_path, image_path);
+        }
+        assert_eq!(settings.relay_test_model, "keep-me");
+    }
 }
 
 #[test]

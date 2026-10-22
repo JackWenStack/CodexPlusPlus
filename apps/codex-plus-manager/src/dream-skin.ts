@@ -211,15 +211,15 @@ export function defaultDreamSkinTheme(): DreamSkinThemeConfig {
   if (typeof navigator !== "undefined" && /\bWindows\b/i.test(navigator.userAgent)) {
     return {
       schemaVersion: 1,
-      id: "preset-arina-hashimoto",
-      name: "桥本有菜",
+      id: "builtin-no-background",
+      name: "默认无背景",
       brandSubtitle: "CODEX DREAM SKIN",
-      tagline: "把柔光与玫瑰带进今天的工作台。",
+      tagline: "自定义你的工作台。",
       projectPrefix: "选择项目 · ",
       projectLabel: "◉  选择项目",
       statusText: "DREAM SKIN ONLINE",
       quote: "MAKE SOMETHING WONDERFUL",
-      image: "dream-reference.jpg",
+      image: "dream-skin-empty.png",
       appearance: "auto",
       art: {
         focusX: 0.72,
